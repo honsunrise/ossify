@@ -1,0 +1,49 @@
+[package]
+name = "ossify"
+version = "0.1.0"
+authors = ["Honsun Zhu <honsun@linux.com>"]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/honsunrise/ossify"
+documentation = "https://docs.rs/ossify"
+readme = "README.md"
+categories = ["web-programming", "api-bindings"]
+keywords = ["oss", "alibaba-cloud", "storage", "oss-sdk", "object-storage"]
+description = "A modern, easy-to-use, and reqwest-powered Rust SDK for Alibaba Cloud Object Storage Service (OSS)"
+
+publish = true
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+bytes = "1.0"
+chrono = "0.4"
+heck = "0.5"
+hex = "0.4"
+hmac = "0.12"
+http = "1.0"
+itoa = "1.0"
+once_cell = "1.19"
+percent-encoding = "2.3"
+quick-xml = { version = "0.38", features = ["serialize"] }
+regex = "1.0"
+reqwest = { version = "0.12", default-features = false, features = [
+  "stream",
+  "json",
+  "rustls-tls",
+] }
+ryu = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_with = "3.14"
+sha2 = "0.10"
+thiserror = "2.0"
+tracing = "0.1"
+url = "2.5"
+urlencoding = "2.1"
+
+[dev-dependencies]
+tokio = { version = "1.40", features = ["full"] }
+tracing-subscriber = "0.3"
+uuid = { version = "1.0", features = ["v4"] }

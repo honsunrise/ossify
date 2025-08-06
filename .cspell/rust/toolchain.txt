@@ -1,0 +1,8 @@
+
+# cspell-tools: keep-case no-split
+
+cargo
+clippy
+rustc
+rustfmt
+rustup

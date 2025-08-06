@@ -1,0 +1,17 @@
+edition = "2024"
+max_width = 110
+fn_call_width = 80
+tab_spaces = 4
+group_imports = "StdExternalCrate"
+reorder_imports = true
+imports_granularity = "Module"
+imports_layout = "HorizontalVertical"
+format_strings = false
+type_punctuation_density = "Wide"
+match_block_trailing_comma = true
+use_small_heuristics = "Default"
+newline_style = "Native"
+overflow_delimited_expr = false
+struct_lit_single_line = true
+single_line_let_else_max_width = 0
+trailing_comma = "Vertical"
