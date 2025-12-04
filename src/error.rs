@@ -31,10 +31,10 @@ pub enum Error {
     #[error("OSS service error: code={code}, message={message}")]
     OssService { code: String, message: String },
 
-    #[error("Invalid XML: {0}")]
+    #[error("Invalid XML(Serialize): {0}")]
     SerializeXml(#[from] quick_xml::se::SeError),
 
-    #[error("Invalid XML: {0}")]
+    #[error("Invalid XML(Deserialize): {0}")]
     DeserializeXml(#[from] quick_xml::de::DeError),
 
     #[error("Invalid Json: {0}")]
@@ -74,7 +74,7 @@ pub enum Error {
     DeHeaderError(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {

@@ -3,10 +3,10 @@ use std::future::Future;
 use http::Method;
 use serde::Deserialize;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// Bucket statistics data. All statistical items are counted in bytes
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -39,11 +39,14 @@ pub struct GetBucketStat {}
 
 impl Ops for GetBucketStat {
     type Response = BodyResponseProcessor<BucketStat>;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = ();
 
-    fn method(&self) -> Method {
-        Method::GET
+    fn prepare(self) -> Result<Prepared> {
+        Ok(Prepared {
+            method: Method::GET,
+            ..Default::default()
+        })
     }
 }
 

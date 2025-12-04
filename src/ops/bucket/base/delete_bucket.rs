@@ -2,21 +2,24 @@ use std::future::Future;
 
 use http::Method;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::EmptyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// Delete bucket operation
 pub struct DeleteBucket {}
 
 impl Ops for DeleteBucket {
     type Response = EmptyResponseProcessor;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = ();
 
-    fn method(&self) -> Method {
-        Method::DELETE
+    fn prepare(self) -> Result<Prepared> {
+        Ok(Prepared {
+            method: Method::DELETE,
+            ..Default::default()
+        })
     }
 }
 

@@ -1,14 +1,13 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::Method;
 use serde::{Deserialize, Serialize};
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::HeaderResponseProcessor;
 use crate::ser::OnlyKeyField;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// GetSymlink request parameters
 #[derive(Debug, Clone, Default, Serialize)]
@@ -60,20 +59,16 @@ pub struct GetSymlink {
 
 impl Ops for GetSymlink {
     type Response = HeaderResponseProcessor<GetSymlinkResponse>;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = GetSymlinkParams;
 
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        // Always return params because we need the symlink query parameter
-        Some(&self.params)
+    fn prepare(self) -> Result<Prepared<GetSymlinkParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 
@@ -84,7 +79,7 @@ pub trait GetSymlinkOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/getsymlink>
     fn get_symlink(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: GetSymlinkParams,
     ) -> impl Future<Output = Result<GetSymlinkResponse>>;
 }
@@ -92,11 +87,11 @@ pub trait GetSymlinkOperations {
 impl GetSymlinkOperations for Client {
     async fn get_symlink(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: GetSymlinkParams,
     ) -> Result<GetSymlinkResponse> {
         let ops = GetSymlink {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params,
         };
 

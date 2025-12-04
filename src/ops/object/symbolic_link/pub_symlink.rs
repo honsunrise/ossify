@@ -1,16 +1,15 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::{HeaderMap, HeaderName, Method};
 use serde::{Deserialize, Serialize};
 
 use super::super::base::StorageClass;
-use crate::body::EmptyBody;
+use crate::body::ZeroBody;
 use crate::error::Result;
 use crate::response::HeaderResponseProcessor;
 use crate::ser::OnlyKeyField;
 use crate::utils::escape_path;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// PutSymlink request parameters (query parameters)
 #[derive(Debug, Clone, Default, Serialize)]
@@ -57,6 +56,32 @@ impl PutSymlinkOptions {
     }
 }
 
+impl PutSymlinkOptions {
+    fn into_headers(self, target_object: &str) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        let target_object = escape_path(target_object);
+        headers.insert(HeaderName::from_static("x-oss-symlink-target"), target_object.parse()?);
+
+        if let Some(forbid_overwrite) = self.forbid_overwrite {
+            headers.insert(
+                HeaderName::from_static("x-oss-forbid-overwrite"),
+                forbid_overwrite.to_string().parse()?,
+            );
+        }
+
+        if let Some(storage_class) = self.storage_class {
+            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
+        }
+
+        if let Some(object_acl) = self.object_acl {
+            headers.insert(HeaderName::from_static("x-oss-object-acl"), object_acl.parse()?);
+        }
+
+        Ok(headers)
+    }
+}
+
 /// PutSymlink response (mainly obtained from response headers)
 #[derive(Debug, Clone, Deserialize)]
 pub struct PutSymlinkResponse {
@@ -73,60 +98,23 @@ pub struct PutSymlink {
     pub object_key: String,
     pub target_object: String,
     pub params: PutSymlinkParams,
-    pub options: Option<PutSymlinkOptions>,
+    pub options: PutSymlinkOptions,
 }
 
 impl Ops for PutSymlink {
     type Response = HeaderResponseProcessor<PutSymlinkResponse>;
-    type Body = EmptyBody;
+    type Body = ZeroBody;
     type Query = PutSymlinkParams;
 
-    fn method(&self) -> Method {
-        Method::PUT
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
-    }
-
-    fn body(&self) -> Option<&()> {
-        None
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-
-        // Set the required x-oss-symlink-target header
-        let target_object = escape_path(&self.target_object);
-        headers.insert(HeaderName::from_static("x-oss-symlink-target"), target_object.parse()?);
-
-        // Set optional headers from options
-        if let Some(options) = &self.options {
-            // Set whether to forbid overwriting files with the same name
-            if let Some(forbid_overwrite) = &options.forbid_overwrite {
-                headers.insert(
-                    HeaderName::from_static("x-oss-forbid-overwrite"),
-                    forbid_overwrite.to_string().parse()?,
-                );
-            }
-
-            // Set storage class
-            if let Some(storage_class) = &options.storage_class {
-                headers
-                    .insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
-            }
-
-            // Set object ACL
-            if let Some(acl) = &options.object_acl {
-                headers.insert(HeaderName::from_static("x-oss-object-acl"), acl.parse()?);
-            }
-        }
-
-        Ok(Some(headers))
+    fn prepare(self) -> Result<Prepared<PutSymlinkParams>> {
+        Ok(Prepared {
+            method: Method::PUT,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers(&self.target_object)?),
+            body: Some(()),
+            ..Default::default()
+        })
     }
 }
 
@@ -137,8 +125,8 @@ pub trait PutSymlinkOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/putsymlink>
     fn put_symlink(
         &self,
-        symlink_key: impl AsRef<str>,
-        target_object: impl AsRef<str>,
+        symlink_key: impl Into<String>,
+        target_object: impl Into<String>,
         options: Option<PutSymlinkOptions>,
     ) -> impl Future<Output = Result<PutSymlinkResponse>>;
 }
@@ -146,15 +134,15 @@ pub trait PutSymlinkOperations {
 impl PutSymlinkOperations for Client {
     async fn put_symlink(
         &self,
-        symlink_key: impl AsRef<str>,
-        target_object: impl AsRef<str>,
+        symlink_key: impl Into<String>,
+        target_object: impl Into<String>,
         options: Option<PutSymlinkOptions>,
     ) -> Result<PutSymlinkResponse> {
         let ops = PutSymlink {
-            object_key: symlink_key.as_ref().to_string(),
-            target_object: target_object.as_ref().to_string(),
+            object_key: symlink_key.into(),
+            target_object: target_object.into(),
             params: PutSymlinkParams::new(),
-            options,
+            options: options.unwrap_or_default(),
         };
 
         self.request(ops).await

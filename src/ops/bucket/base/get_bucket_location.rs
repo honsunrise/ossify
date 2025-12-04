@@ -1,22 +1,36 @@
 use std::future::Future;
 
 use http::Method;
+use serde::Serialize;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::ser::OnlyKeyField;
+use crate::{Client, Ops, Prepared, Request};
+
+/// Get bucket location request parameters
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct GetBucketLocationParams {
+    location: OnlyKeyField,
+}
 
 /// Get bucket location operation
 pub struct GetBucketLocation {}
 
 impl Ops for GetBucketLocation {
     type Response = BodyResponseProcessor<String>;
-    type Body = EmptyBody;
-    type Query = ();
+    type Body = NoneBody;
+    type Query = GetBucketLocationParams;
 
-    fn method(&self) -> Method {
-        Method::GET
+    fn prepare(self) -> Result<Prepared<GetBucketLocationParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            query: Some(GetBucketLocationParams {
+                location: OnlyKeyField,
+            }),
+            ..Default::default()
+        })
     }
 }
 

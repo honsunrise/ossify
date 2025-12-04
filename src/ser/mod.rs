@@ -563,4 +563,11 @@ mod tests {
         let expected2 = "a=1&b=42&d=2";
         assert_eq!(to_string(&u2).unwrap(), expected2);
     }
+
+    #[test]
+    fn test_serialize_tags() {
+        let tags = vec![("key1", "value1"), ("key2", "value2")];
+        let expected = "key1=value1&key2=value2";
+        assert_eq!(to_string(&tags).unwrap(), expected);
+    }
 }

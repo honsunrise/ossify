@@ -1,9 +1,9 @@
-mod body;
+pub mod body;
 mod credential;
 mod error;
 pub mod ops;
 mod query_auth_option;
-mod response;
+pub mod response;
 mod ser;
 mod utils;
 
@@ -17,15 +17,46 @@ use serde::Serialize;
 use tracing::trace;
 use url::Url;
 
-use self::body::MakeBody;
+pub use self::body::MakeBody;
 use self::credential::{Credential, SignContext};
-pub use self::error::Error;
-use self::error::Result;
+pub use self::error::{Error, Result};
 pub use self::query_auth_option::{QueryAuthOptions, QueryAuthOptionsBuilder};
-use self::response::ResponseProcessor;
-use self::utils::escape_path;
+pub use self::response::ResponseProcessor;
+pub use self::utils::escape_path;
 
-pub(crate) trait Ops: Sized {
+/// Alias for a type-erased error type.
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+#[derive(Debug, Clone)]
+pub struct Prepared<Q = (), B = ()> {
+    /// The HTTP Method used for this operation (e.g. GET, PATCH, DELETE)
+    pub method: http::Method,
+    /// The Key for this operation
+    pub key: Option<String>,
+    /// Additional headers used for signature calculation
+    pub additional_headers: HashSet<String>,
+    /// The headers for the request, if any
+    pub headers: Option<HeaderMap>,
+    /// The query string for the request, if any
+    pub query: Option<Q>,
+    /// The body of the request, if any
+    pub body: Option<B>,
+}
+
+impl<Q, B> Default for Prepared<Q, B> {
+    fn default() -> Self {
+        Self {
+            method: http::Method::GET,
+            key: None,
+            additional_headers: HashSet::new(),
+            headers: None,
+            query: None,
+            body: None,
+        }
+    }
+}
+
+pub trait Ops: Sized {
     const PRODUCT: &'static str = "oss";
     const USE_BUCKET: bool = true;
 
@@ -33,33 +64,7 @@ pub(crate) trait Ops: Sized {
     type Body: MakeBody;
     type Response;
 
-    /// The HTTP Method used for this operation (e.g. GET, PATCH, DELETE)
-    fn method(&self) -> http::Method;
-
-    /// The Key for this operation
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        None
-    }
-
-    /// Additional headers used for signature calculation
-    fn additional_headers(&self) -> HashSet<String> {
-        HashSet::new()
-    }
-
-    /// Additional headers
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        Ok(None)
-    }
-
-    /// The query string for the request, if any
-    fn query(&self) -> Option<&Self::Query> {
-        None
-    }
-
-    /// The body of the request, if any
-    fn body(&self) -> Option<&<Self::Body as MakeBody>::Body> {
-        None
-    }
+    fn prepare(self) -> Result<Prepared<Self::Query, <Self::Body as MakeBody>::Body>>;
 }
 
 pub(crate) trait Request<P> {
@@ -182,15 +187,23 @@ impl Client {
     ) -> Result<reqwest::Request>
     where
         P: Ops + Send + 'static,
-        P::Query: Serialize + Send,
+        P::Query: Serialize + Clone + Send,
         P::Response: ResponseProcessor + Send,
         P::Body: MakeBody + Send,
     {
-        let method = ops.method();
+        let Prepared {
+            method,
+            key,
+            additional_headers,
+            headers: extra_headers,
+            query,
+            body,
+        } = ops.prepare()?;
+
         let bucket = P::USE_BUCKET.then_some(Cow::Borrowed(self.bucket.as_str()));
 
         // Build the request
-        let (host, path) = self.build_url(bucket.clone(), ops.key(), public);
+        let (host, path) = self.build_url(bucket.clone(), key.as_deref().map(Cow::Borrowed), public);
         let scheme = if public {
             &self.raw_public_scheme
         } else {
@@ -199,30 +212,32 @@ impl Client {
         let request_url = format!("{scheme}://{host}{path}");
         let mut request = self.http_client.request(method.clone(), request_url).build()?;
 
-        // Prepare additional headers
-        let mut additional_headers = ops.additional_headers();
-
-        // Fill the body if any
-        if let Some(body) = ops.body() {
-            P::Body::make_body(body, &mut request)?;
-            additional_headers.insert("content-length".to_string());
-        }
-
         let headers = request.headers_mut();
         // Fill the headers if any
-        if let Some(extra_headers) = ops.headers()? {
+        if let Some(extra_headers) = extra_headers {
             headers.extend(extra_headers);
         }
 
         headers.insert(HOST, host.parse()?);
+
+        // Prepare additional headers
+        let additional_headers = additional_headers
+            .into_iter()
+            .map(Cow::Owned)
+            .collect::<HashSet<Cow<str>>>();
+
+        // Fill the body if any
+        if let Some(body) = body {
+            P::Body::make_body(body, &mut request)?;
+        }
 
         // Prepare sign context
         let sign_context = SignContext {
             region: Cow::Borrowed(&self.region),
             product: Cow::Borrowed(P::PRODUCT),
             bucket,
-            key: ops.key(),
-            query: ops.query(),
+            key: key.as_deref().map(Cow::Borrowed),
+            query: query.as_ref(),
             additional_headers,
         };
 
@@ -237,7 +252,7 @@ impl Client {
 impl<P> Request<P> for Client
 where
     P: Ops + Send + 'static,
-    P::Query: Serialize + Send,
+    P::Query: Clone + Serialize + Send,
     P::Response: ResponseProcessor + Send,
     P::Body: MakeBody + Send,
 {

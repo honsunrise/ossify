@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::future::Future;
 
@@ -7,11 +6,11 @@ use http::{HeaderMap, HeaderName, Method, header};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::body::EmptyBody;
+use crate::body::ZeroBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
 use crate::ser::OnlyKeyField;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// Storage class
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -134,6 +133,87 @@ pub struct InitiateMultipartUploadOptions {
     pub user_meta: HashMap<String, String>,
 }
 
+impl InitiateMultipartUploadOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(cache_control) = self.cache_control {
+            headers.insert(header::CACHE_CONTROL, cache_control.parse()?);
+        }
+
+        // Set content type
+        if let Some(content_type) = self.content_type {
+            headers.insert(header::CONTENT_TYPE, content_type.parse()?);
+        }
+
+        // Set content disposition
+        if let Some(content_disposition) = self.content_disposition {
+            headers.insert(header::CONTENT_DISPOSITION, content_disposition.parse()?);
+        }
+
+        // Set content encoding
+        if let Some(content_encoding) = self.content_encoding {
+            headers.insert(header::CONTENT_ENCODING, content_encoding.parse()?);
+        }
+
+        // Set Expiration time
+        if let Some(expires) = self.expires {
+            headers.insert(header::EXPIRES, expires.parse()?);
+        }
+
+        // Set whether to allow overwriting files with the same name
+        if let Some(forbid_overwrite) = self.forbid_overwrite {
+            headers.insert(
+                HeaderName::from_static("x-oss-forbid-overwrite"),
+                forbid_overwrite.to_string().parse()?,
+            );
+        }
+
+        // Set Server-side encryption method
+        if let Some(server_side_encryption) = self.server_side_encryption {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-encryption"),
+                server_side_encryption.as_ref().parse()?,
+            );
+        }
+
+        // Set server-side data encryption algorithm
+        if let Some(server_side_data_encryption) = self.server_side_data_encryption {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-data-encryption"),
+                server_side_data_encryption.parse()?,
+            );
+        }
+
+        // Set KMS key ID
+        if let Some(server_side_encryption_key_id) = self.server_side_encryption_key_id {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-encryption-key-id"),
+                server_side_encryption_key_id.parse()?,
+            );
+        }
+
+        // Set Storage class
+        if let Some(storage_class) = self.storage_class {
+            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
+        }
+
+        // Set Object tags
+        if let Some(tagging) = self.tagging {
+            headers.insert(HeaderName::from_static("x-oss-tagging"), tagging.parse()?);
+        }
+
+        // Set User-defined metadata
+        for (key, value) in self.user_meta {
+            let key = key.to_kebab_case().to_lowercase();
+            let header_name = format!("x-oss-meta-{key}");
+            headers.insert(HeaderName::from_bytes(header_name.as_bytes())?, value.parse()?);
+        }
+
+        Ok(headers)
+    }
+}
+
 /// InitiateMultipartUpload response
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -152,109 +232,23 @@ pub struct InitiateMultipartUploadResult {
 pub struct InitiateMultipartUpload {
     pub object_key: String,
     pub params: InitiateMultipartUploadParams,
-    pub options: Option<InitiateMultipartUploadOptions>,
+    pub options: InitiateMultipartUploadOptions,
 }
 
 impl Ops for InitiateMultipartUpload {
     type Response = BodyResponseProcessor<InitiateMultipartUploadResult>;
-    type Body = EmptyBody;
+    type Body = ZeroBody;
     type Query = InitiateMultipartUploadParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::POST
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-        let Some(options) = &self.options else {
-            return Ok(None);
-        };
-
-        // Set cache control
-        if let Some(cache_control) = &options.cache_control {
-            headers.insert(header::CACHE_CONTROL, cache_control.parse()?);
-        }
-
-        // Set content type
-        if let Some(content_type) = &options.content_type {
-            headers.insert(header::CONTENT_TYPE, content_type.parse()?);
-        }
-
-        // Set content disposition
-        if let Some(content_disposition) = &options.content_disposition {
-            headers.insert(header::CONTENT_DISPOSITION, content_disposition.parse()?);
-        }
-
-        // Set content encoding
-        if let Some(content_encoding) = &options.content_encoding {
-            headers.insert(header::CONTENT_ENCODING, content_encoding.parse()?);
-        }
-
-        // Set Expiration time
-        if let Some(expires) = &options.expires {
-            headers.insert(header::EXPIRES, expires.parse()?);
-        }
-
-        // Set whether to allow overwriting files with the same name
-        if let Some(forbid_overwrite) = &options.forbid_overwrite {
-            headers.insert(
-                HeaderName::from_static("x-oss-forbid-overwrite"),
-                forbid_overwrite.to_string().parse()?,
-            );
-        }
-
-        // Set Server-side encryption method
-        if let Some(server_side_encryption) = &options.server_side_encryption {
-            headers.insert(
-                HeaderName::from_static("x-oss-server-side-encryption"),
-                server_side_encryption.as_ref().parse()?,
-            );
-        }
-
-        // Set server-side data encryption algorithm
-        if let Some(server_side_data_encryption) = &options.server_side_data_encryption {
-            headers.insert(
-                HeaderName::from_static("x-oss-server-side-data-encryption"),
-                server_side_data_encryption.parse()?,
-            );
-        }
-
-        // Set KMS key ID
-        if let Some(server_side_encryption_key_id) = &options.server_side_encryption_key_id {
-            headers.insert(
-                HeaderName::from_static("x-oss-server-side-encryption-key-id"),
-                server_side_encryption_key_id.parse()?,
-            );
-        }
-
-        // Set Storage class
-        if let Some(storage_class) = &options.storage_class {
-            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
-        }
-
-        // Set Object tags
-        if let Some(tagging) = &options.tagging {
-            headers.insert(HeaderName::from_static("x-oss-tagging"), tagging.parse()?);
-        }
-
-        // Set User-defined metadata
-        for (key, value) in &options.user_meta {
-            let key = key.to_kebab_case().to_lowercase();
-            let header_name = format!("x-oss-meta-{key}");
-            headers.insert(HeaderName::from_bytes(header_name.as_bytes())?, value.parse()?);
-        }
-
-        Ok(Some(headers))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
+    fn prepare(self) -> Result<Prepared<InitiateMultipartUploadParams>> {
+        Ok(Prepared {
+            method: Method::POST,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers()?),
+            body: Some(()),
+            ..Default::default()
+        })
     }
 }
 
@@ -265,7 +259,7 @@ pub trait InitiateMultipartUploadOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/initiatemultipartupload>
     fn initiate_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         options: Option<InitiateMultipartUploadOptions>,
     ) -> impl Future<Output = Result<InitiateMultipartUploadResult>>;
 }
@@ -273,13 +267,13 @@ pub trait InitiateMultipartUploadOperations {
 impl InitiateMultipartUploadOperations for Client {
     async fn initiate_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         options: Option<InitiateMultipartUploadOptions>,
     ) -> Result<InitiateMultipartUploadResult> {
         let ops = InitiateMultipartUpload {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params: InitiateMultipartUploadParams::new(),
-            options,
+            options: options.unwrap_or_default(),
         };
         self.request(ops).await
     }

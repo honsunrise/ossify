@@ -2,14 +2,14 @@ use http::Method;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::Owner;
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct ListBucketsOptions {
+pub struct ListBucketsParams {
     pub marker: Option<String>,
     pub max_keys: Option<u32>,
     pub prefix: Option<String>,
@@ -59,36 +59,41 @@ pub struct ListAllMyBucketsResult {
 }
 
 pub struct ListBuckets {
-    pub options: Option<ListBucketsOptions>,
+    pub params: ListBucketsParams,
 }
 
 impl Ops for ListBuckets {
     type Response = BodyResponseProcessor<ListAllMyBucketsResult>;
-    type Body = EmptyBody;
-    type Query = ListBucketsOptions;
+    type Body = NoneBody;
+    type Query = ListBucketsParams;
 
-    const PRODUCT: &'static str = "oss";
     const USE_BUCKET: bool = false;
 
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        self.options.as_ref()
+    fn prepare(self) -> Result<Prepared<ListBucketsParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 
 pub trait ServiceOperations {
+    /// Lists all buckets that belong to your Alibaba Cloud account.
+    /// You can specify the prefix, marker, or max-keys parameter to list buckets that meet specific conditions.
+    ///
+    /// Official document: <https://www.alibabacloud.com/help/en/oss/developer-reference/listbuckets>
     fn list_buckets(
         &self,
-        options: Option<ListBucketsOptions>,
+        params: Option<ListBucketsParams>,
     ) -> impl Future<Output = Result<ListAllMyBucketsResult>>;
 }
 
 impl ServiceOperations for Client {
-    async fn list_buckets(&self, options: Option<ListBucketsOptions>) -> Result<ListAllMyBucketsResult> {
-        let ops = ListBuckets { options };
+    async fn list_buckets(&self, params: Option<ListBucketsParams>) -> Result<ListAllMyBucketsResult> {
+        let ops = ListBuckets {
+            params: params.unwrap_or_default(),
+        };
         self.request(ops).await
     }
 }

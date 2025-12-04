@@ -1,14 +1,13 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use bytes::Bytes;
 use http::{HeaderMap, Method, header};
 use serde::Serialize;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BinaryResponseProcessor;
-use crate::{Client, Ops, QueryAuthOptions, Request};
+use crate::{Client, Ops, Prepared, QueryAuthOptions, Request};
 
 /// GetObject request parameters
 #[derive(Debug, Clone, Default, Serialize)]
@@ -146,81 +145,61 @@ impl GetObjectOptions {
     }
 }
 
-/// GetObject operation
-pub struct GetObject {
-    pub object_key: String,
-    pub params: GetObjectParams,
-    pub options: Option<GetObjectOptions>,
-}
-
-impl Ops for GetObject {
-    type Response = BinaryResponseProcessor;
-    type Body = EmptyBody;
-    type Query = GetObjectParams;
-
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        // Return params if any query parameters need to be set
-        if self.params.version_id.is_some()
-            || self.params.response_cache_control.is_some()
-            || self.params.response_content_disposition.is_some()
-            || self.params.response_content_encoding.is_some()
-            || self.params.response_content_language.is_some()
-            || self.params.response_content_type.is_some()
-            || self.params.response_expires.is_some()
-        {
-            Some(&self.params)
-        } else {
-            None
-        }
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let Some(options) = &self.options else {
-            return Ok(None);
-        };
-
+impl GetObjectOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
 
         // Set Range header
-        if let Some(range) = &options.range {
+        if let Some(range) = self.range {
             headers.insert(header::RANGE, range.parse()?);
         }
 
         // Set conditional request headers
-        if let Some(if_modified_since) = &options.if_modified_since {
+        if let Some(if_modified_since) = self.if_modified_since {
             headers.insert(header::IF_MODIFIED_SINCE, if_modified_since.parse()?);
         }
 
-        if let Some(if_unmodified_since) = &options.if_unmodified_since {
+        if let Some(if_unmodified_since) = self.if_unmodified_since {
             headers.insert(header::IF_UNMODIFIED_SINCE, if_unmodified_since.parse()?);
         }
 
-        if let Some(if_match) = &options.if_match {
+        if let Some(if_match) = self.if_match {
             headers.insert(header::IF_MATCH, if_match.parse()?);
         }
 
-        if let Some(if_none_match) = &options.if_none_match {
+        if let Some(if_none_match) = self.if_none_match {
             headers.insert(header::IF_NONE_MATCH, if_none_match.parse()?);
         }
 
         // Set Accept-Encoding header
-        if let Some(accept_encoding) = &options.accept_encoding {
+        if let Some(accept_encoding) = self.accept_encoding {
             headers.insert(header::ACCEPT_ENCODING, accept_encoding.parse()?);
         }
 
-        if headers.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(headers))
-        }
+        Ok(headers)
+    }
+}
+
+/// GetObject operation
+pub struct GetObject {
+    pub object_key: String,
+    pub params: GetObjectParams,
+    pub options: GetObjectOptions,
+}
+
+impl Ops for GetObject {
+    type Response = BinaryResponseProcessor;
+    type Body = NoneBody;
+    type Query = GetObjectParams;
+
+    fn prepare(self) -> Result<Prepared<GetObjectParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers()?),
+            ..Default::default()
+        })
     }
 }
 
@@ -231,14 +210,14 @@ pub trait GetObjectOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/getobject>
     fn get_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: GetObjectParams,
         options: Option<GetObjectOptions>,
     ) -> impl Future<Output = Result<Bytes>>;
 
     fn presign_get_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         public: bool,
         params: GetObjectParams,
         options: Option<GetObjectOptions>,
@@ -249,14 +228,14 @@ pub trait GetObjectOperations {
 impl GetObjectOperations for Client {
     async fn get_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: GetObjectParams,
         options: Option<GetObjectOptions>,
     ) -> Result<Bytes> {
         let ops = GetObject {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params,
-            options,
+            options: options.unwrap_or_default(),
         };
 
         self.request(ops).await
@@ -264,18 +243,17 @@ impl GetObjectOperations for Client {
 
     async fn presign_get_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         public: bool,
         params: GetObjectParams,
         options: Option<GetObjectOptions>,
         query_auth_options: QueryAuthOptions,
     ) -> Result<String> {
         let ops = GetObject {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params,
-            options,
+            options: options.unwrap_or_default(),
         };
-
         self.presign(ops, public, Some(query_auth_options)).await
     }
 }

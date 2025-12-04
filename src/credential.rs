@@ -30,7 +30,7 @@ where
     pub bucket: Option<Cow<'a, str>>,
     pub key: Option<Cow<'a, str>>,
     pub query: Option<&'a Q>,
-    pub additional_headers: HashSet<String>,
+    pub additional_headers: HashSet<Cow<'a, str>>,
 }
 
 #[derive(Serialize)]
@@ -226,7 +226,7 @@ fn calculate_signature(
     Ok(signature)
 }
 
-fn canonical_headers(input: &HeaderMap, additional_headers: &HashSet<String>) -> Result<String> {
+fn canonical_headers(input: &HeaderMap, additional_headers: &HashSet<Cow<'_, str>>) -> Result<String> {
     use std::fmt::Write;
 
     let mut headers = Vec::with_capacity(input.len());

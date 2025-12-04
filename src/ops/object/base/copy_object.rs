@@ -1,38 +1,17 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::header::HeaderName;
 use http::{HeaderMap, Method};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::body::EmptyBody;
+use crate::body::ZeroBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
 use crate::utils::escape_path;
-use crate::{Client, Ops, Request};
-
-/// CopyObject request parameters
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct CopyObjectParams {
-    /// Version ID of the source object
-    #[serde(rename = "versionId")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version_id: Option<String>,
-}
-
-impl CopyObjectParams {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn version_id(mut self, version_id: impl Into<String>) -> Self {
-        self.version_id = Some(version_id.into());
-        self
-    }
-}
+use crate::{Client, Ops, Prepared, Request};
 
 /// CopyObject options for headers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CopyObjectOptions {
     /// Whether the CopyObject operation overwrites objects with the same name
     pub forbid_overwrite: Option<bool>,
@@ -70,33 +49,9 @@ pub struct CopyObjectOptions {
     pub tagging_directive: Option<String>,
 }
 
-impl Default for CopyObjectOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl CopyObjectOptions {
     pub fn new() -> Self {
-        Self {
-            forbid_overwrite: None,
-            copy_source_if_match: None,
-            copy_source_if_none_match: None,
-            copy_source_if_modified_since: None,
-            copy_source_if_unmodified_since: None,
-            metadata_directive: None,
-            cache_control: None,
-            content_disposition: None,
-            content_encoding: None,
-            content_language: None,
-            content_type: None,
-            expires: None,
-            server_side_encryption: None,
-            server_side_encryption_key_id: None,
-            storage_class: None,
-            tagging: None,
-            tagging_directive: None,
-        }
+        Default::default()
     }
 
     /// Set whether to forbid overwriting files with the same name
@@ -202,6 +157,122 @@ impl CopyObjectOptions {
     }
 }
 
+impl CopyObjectOptions {
+    fn into_headers(
+        self,
+        source_bucket: String,
+        source_key: String,
+        source_version_id: Option<String>,
+    ) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        // Set copy source (required)
+        let source_key = escape_path(&source_key);
+        let mut copy_source = format!("/{source_bucket}/{source_key}");
+        if let Some(source_version_id) = source_version_id {
+            copy_source.push_str(&format!("?versionId={source_version_id}"));
+        }
+        headers.insert(HeaderName::from_static("x-oss-copy-source"), copy_source.parse()?);
+
+        // Set forbid overwrite
+        if let Some(forbid_overwrite) = &self.forbid_overwrite {
+            headers.insert(
+                HeaderName::from_static("x-oss-forbid-overwrite"),
+                forbid_overwrite.to_string().parse()?,
+            );
+        }
+
+        // Set copy source conditions
+        if let Some(copy_source_if_match) = &self.copy_source_if_match {
+            headers.insert(
+                HeaderName::from_static("x-oss-copy-source-if-match"),
+                copy_source_if_match.parse()?,
+            );
+        }
+
+        if let Some(copy_source_if_none_match) = &self.copy_source_if_none_match {
+            headers.insert(
+                HeaderName::from_static("x-oss-copy-source-if-none-match"),
+                copy_source_if_none_match.parse()?,
+            );
+        }
+
+        if let Some(copy_source_if_modified_since) = &self.copy_source_if_modified_since {
+            headers.insert(
+                HeaderName::from_static("x-oss-copy-source-if-modified-since"),
+                copy_source_if_modified_since.parse()?,
+            );
+        }
+
+        if let Some(copy_source_if_unmodified_since) = &self.copy_source_if_unmodified_since {
+            headers.insert(
+                HeaderName::from_static("x-oss-copy-source-if-unmodified-since"),
+                copy_source_if_unmodified_since.parse()?,
+            );
+        }
+
+        // Set metadata directive
+        if let Some(metadata_directive) = &self.metadata_directive {
+            headers.insert(HeaderName::from_static("x-oss-metadata-directive"), metadata_directive.parse()?);
+        }
+
+        // Set content headers
+        if let Some(cache_control) = &self.cache_control {
+            headers.insert(HeaderName::from_static("cache-control"), cache_control.parse()?);
+        }
+
+        if let Some(content_disposition) = &self.content_disposition {
+            headers.insert(HeaderName::from_static("content-disposition"), content_disposition.parse()?);
+        }
+
+        if let Some(content_encoding) = &self.content_encoding {
+            headers.insert(HeaderName::from_static("content-encoding"), content_encoding.parse()?);
+        }
+
+        if let Some(content_language) = &self.content_language {
+            headers.insert(HeaderName::from_static("content-language"), content_language.parse()?);
+        }
+
+        if let Some(content_type) = &self.content_type {
+            headers.insert(HeaderName::from_static("content-type"), content_type.parse()?);
+        }
+
+        if let Some(expires) = &self.expires {
+            headers.insert(HeaderName::from_static("expires"), expires.parse()?);
+        }
+
+        // Set server side encryption
+        if let Some(server_side_encryption) = &self.server_side_encryption {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-encryption"),
+                server_side_encryption.parse()?,
+            );
+        }
+
+        if let Some(server_side_encryption_key_id) = &self.server_side_encryption_key_id {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-encryption-key-id"),
+                server_side_encryption_key_id.parse()?,
+            );
+        }
+
+        // Set storage class
+        if let Some(storage_class) = &self.storage_class {
+            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.parse()?);
+        }
+
+        // Set tagging
+        if let Some(tagging) = &self.tagging {
+            headers.insert(HeaderName::from_static("x-oss-tagging"), tagging.parse()?);
+        }
+
+        if let Some(tagging_directive) = &self.tagging_directive {
+            headers.insert(HeaderName::from_static("x-oss-tagging-directive"), tagging_directive.parse()?);
+        }
+        Ok(headers)
+    }
+}
+
 /// CopyObject response
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -215,136 +286,30 @@ pub struct CopyObjectResult {
 
 /// CopyObject operation
 pub struct CopyObject {
-    pub source_key_with_bucket: String,
+    pub source_bucket: String,
+    pub source_key: String,
+    pub source_version_id: Option<String>,
     pub target_key: String,
-    pub params: Option<CopyObjectParams>,
-    pub options: Option<CopyObjectOptions>,
+    pub options: CopyObjectOptions,
 }
 
 impl Ops for CopyObject {
     type Response = BodyResponseProcessor<CopyObjectResult>;
-    type Body = EmptyBody;
-    type Query = CopyObjectParams;
+    type Body = ZeroBody;
+    type Query = ();
 
-    fn method(&self) -> Method {
-        Method::PUT
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.target_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        self.params.as_ref()
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-
-        // Set copy source (required)
-        let copy_source = escape_path(&self.source_key_with_bucket);
-        headers.insert(HeaderName::from_static("x-oss-copy-source"), copy_source.parse()?);
-
-        if let Some(options) = &self.options {
-            // Set forbid overwrite
-            if let Some(forbid_overwrite) = &options.forbid_overwrite {
-                headers.insert(
-                    HeaderName::from_static("x-oss-forbid-overwrite"),
-                    forbid_overwrite.to_string().parse()?,
-                );
-            }
-
-            // Set copy source conditions
-            if let Some(copy_source_if_match) = &options.copy_source_if_match {
-                headers.insert(
-                    HeaderName::from_static("x-oss-copy-source-if-match"),
-                    copy_source_if_match.parse()?,
-                );
-            }
-
-            if let Some(copy_source_if_none_match) = &options.copy_source_if_none_match {
-                headers.insert(
-                    HeaderName::from_static("x-oss-copy-source-if-none-match"),
-                    copy_source_if_none_match.parse()?,
-                );
-            }
-
-            if let Some(copy_source_if_modified_since) = &options.copy_source_if_modified_since {
-                headers.insert(
-                    HeaderName::from_static("x-oss-copy-source-if-modified-since"),
-                    copy_source_if_modified_since.parse()?,
-                );
-            }
-
-            if let Some(copy_source_if_unmodified_since) = &options.copy_source_if_unmodified_since {
-                headers.insert(
-                    HeaderName::from_static("x-oss-copy-source-if-unmodified-since"),
-                    copy_source_if_unmodified_since.parse()?,
-                );
-            }
-
-            // Set metadata directive
-            if let Some(metadata_directive) = &options.metadata_directive {
-                headers
-                    .insert(HeaderName::from_static("x-oss-metadata-directive"), metadata_directive.parse()?);
-            }
-
-            // Set content headers
-            if let Some(cache_control) = &options.cache_control {
-                headers.insert(HeaderName::from_static("cache-control"), cache_control.parse()?);
-            }
-
-            if let Some(content_disposition) = &options.content_disposition {
-                headers.insert(HeaderName::from_static("content-disposition"), content_disposition.parse()?);
-            }
-
-            if let Some(content_encoding) = &options.content_encoding {
-                headers.insert(HeaderName::from_static("content-encoding"), content_encoding.parse()?);
-            }
-
-            if let Some(content_language) = &options.content_language {
-                headers.insert(HeaderName::from_static("content-language"), content_language.parse()?);
-            }
-
-            if let Some(content_type) = &options.content_type {
-                headers.insert(HeaderName::from_static("content-type"), content_type.parse()?);
-            }
-
-            if let Some(expires) = &options.expires {
-                headers.insert(HeaderName::from_static("expires"), expires.parse()?);
-            }
-
-            // Set server side encryption
-            if let Some(server_side_encryption) = &options.server_side_encryption {
-                headers.insert(
-                    HeaderName::from_static("x-oss-server-side-encryption"),
-                    server_side_encryption.parse()?,
-                );
-            }
-
-            if let Some(server_side_encryption_key_id) = &options.server_side_encryption_key_id {
-                headers.insert(
-                    HeaderName::from_static("x-oss-server-side-encryption-key-id"),
-                    server_side_encryption_key_id.parse()?,
-                );
-            }
-
-            // Set storage class
-            if let Some(storage_class) = &options.storage_class {
-                headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.parse()?);
-            }
-
-            // Set tagging
-            if let Some(tagging) = &options.tagging {
-                headers.insert(HeaderName::from_static("x-oss-tagging"), tagging.parse()?);
-            }
-
-            if let Some(tagging_directive) = &options.tagging_directive {
-                headers
-                    .insert(HeaderName::from_static("x-oss-tagging-directive"), tagging_directive.parse()?);
-            }
-        }
-        Ok(Some(headers))
+    fn prepare(self) -> Result<Prepared> {
+        Ok(Prepared {
+            method: Method::PUT,
+            key: Some(self.target_key),
+            headers: Some(self.options.into_headers(
+                self.source_bucket,
+                self.source_key,
+                self.source_version_id,
+            )?),
+            body: Some(()),
+            ..Default::default()
+        })
     }
 }
 
@@ -355,9 +320,21 @@ pub trait CopyObjectOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/copyobject>
     fn copy_object(
         &self,
-        source_key_with_bucket: impl Into<String>,
+        source_bucket: impl Into<String>,
+        source_key: impl Into<String>,
         target_key: impl Into<String>,
-        params: Option<CopyObjectParams>,
+        options: Option<CopyObjectOptions>,
+    ) -> impl Future<Output = Result<CopyObjectResult>>;
+
+    /// Copy an object within a bucket or between buckets in the same region
+    ///
+    /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/copyobject>
+    fn copy_object_with_version_id(
+        &self,
+        source_bucket: impl Into<String>,
+        source_key: impl Into<String>,
+        source_version_id: impl Into<String>,
+        target_key: impl Into<String>,
         options: Option<CopyObjectOptions>,
     ) -> impl Future<Output = Result<CopyObjectResult>>;
 }
@@ -365,18 +342,45 @@ pub trait CopyObjectOperations {
 impl CopyObjectOperations for Client {
     async fn copy_object(
         &self,
-        source_key_with_bucket: impl Into<String>,
+        source_bucket: impl Into<String>,
+        source_key: impl Into<String>,
         target_key: impl Into<String>,
-        params: Option<CopyObjectParams>,
         options: Option<CopyObjectOptions>,
     ) -> Result<CopyObjectResult> {
-        let source_key_with_bucket = source_key_with_bucket.into();
+        let source_bucket = source_bucket.into();
+        let source_key = source_key.into();
         let target_key = target_key.into();
 
         let ops = CopyObject {
-            source_key_with_bucket,
+            source_bucket,
+            source_key,
+            source_version_id: None,
             target_key,
-            params,
+            options: options.unwrap_or_default(),
+        };
+
+        self.request(ops).await
+    }
+
+    async fn copy_object_with_version_id(
+        &self,
+        source_bucket: impl Into<String>,
+        source_key: impl Into<String>,
+        source_version_id: impl Into<String>,
+        target_key: impl Into<String>,
+        options: Option<CopyObjectOptions>,
+    ) -> Result<CopyObjectResult> {
+        let source_bucket = source_bucket.into();
+        let source_key = source_key.into();
+        let source_version_id = source_version_id.into();
+        let target_key = target_key.into();
+        let options = options.unwrap_or_default();
+
+        let ops = CopyObject {
+            source_bucket,
+            source_key,
+            source_version_id: Some(source_version_id),
+            target_key,
             options,
         };
 

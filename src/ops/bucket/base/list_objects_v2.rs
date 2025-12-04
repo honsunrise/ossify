@@ -4,11 +4,11 @@ use http::Method;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::ops::Owner;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, QueryAuthOptions, Request};
+use crate::{Client, Ops, Prepared, QueryAuthOptions, Request};
 
 /// Object summary data for list objects v2
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -83,11 +83,13 @@ pub struct ListObjectsResult {
     pub contents: Vec<ObjectSummary>,
 }
 
-/// Options for listing objects in a bucket
+/// Query parameters for ListObjectsV2, includes the required list-type=2 parameter
 #[skip_serializing_none]
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct ListObjectsOptions {
+pub struct ListObjectsV2Params {
+    /// must be 2, means using ListObjectsV2 interface
+    list_type: u8,
     /// Character used to group object names. All object names containing the specified prefix,
     /// objects between the first occurrence of the delimiter character are treated as a group of elements
     pub delimiter: Option<String>,
@@ -108,43 +110,45 @@ pub struct ListObjectsOptions {
     pub fetch_owner: Option<bool>,
 }
 
-/// Query parameters for ListObjectsV2, includes the required list-type=2 parameter
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct ListObjectsV2Query {
-    /// must be 2, means using ListObjectsV2 interface
-    pub list_type: u8,
-    #[serde(flatten)]
-    pub options: Option<ListObjectsOptions>,
+impl Default for ListObjectsV2Params {
+    fn default() -> Self {
+        Self {
+            list_type: 2,
+            delimiter: None,
+            start_after: None,
+            continuation_token: None,
+            max_keys: None,
+            prefix: None,
+            encoding_type: None,
+            fetch_owner: None,
+        }
+    }
 }
 
 /// List objects operation
 pub struct ListObjects {
-    pub query: ListObjectsV2Query,
+    pub query: ListObjectsV2Params,
 }
 
 impl ListObjects {
-    pub fn new(options: Option<ListObjectsOptions>) -> Self {
+    pub fn new(options: Option<ListObjectsV2Params>) -> Self {
         Self {
-            query: ListObjectsV2Query {
-                list_type: 2, // must be 2
-                options,
-            },
+            query: options.unwrap_or_default(),
         }
     }
 }
 
 impl Ops for ListObjects {
     type Response = BodyResponseProcessor<ListObjectsResult>;
-    type Body = EmptyBody;
-    type Query = ListObjectsV2Query;
+    type Body = NoneBody;
+    type Query = ListObjectsV2Params;
 
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.query)
+    fn prepare(self) -> Result<Prepared<ListObjectsV2Params>> {
+        Ok(Prepared {
+            method: Method::GET,
+            query: Some(self.query),
+            ..Default::default()
+        })
     }
 }
 
@@ -154,31 +158,31 @@ pub trait ListObjectsOps {
     /// Official document: <https://www.alibabacloud.com/help/en/oss/developer-reference/listobjectsv2>
     fn list_objects(
         &self,
-        options: Option<ListObjectsOptions>,
+        params: Option<ListObjectsV2Params>,
     ) -> impl Future<Output = Result<ListObjectsResult>>;
 
     /// Presign list objects operation
     fn presign_list_objects(
         &self,
         public: bool,
-        options: Option<ListObjectsOptions>,
+        params: Option<ListObjectsV2Params>,
         query_auth_options: QueryAuthOptions,
     ) -> impl Future<Output = Result<String>>;
 }
 
 impl ListObjectsOps for Client {
-    async fn list_objects(&self, options: Option<ListObjectsOptions>) -> Result<ListObjectsResult> {
-        let ops = ListObjects::new(options);
+    async fn list_objects(&self, params: Option<ListObjectsV2Params>) -> Result<ListObjectsResult> {
+        let ops = ListObjects::new(params);
         self.request(ops).await
     }
 
     async fn presign_list_objects(
         &self,
         public: bool,
-        options: Option<ListObjectsOptions>,
+        params: Option<ListObjectsV2Params>,
         query_auth_options: QueryAuthOptions,
     ) -> Result<String> {
-        let ops = ListObjects::new(options);
+        let ops = ListObjects::new(params);
         self.presign(ops, public, Some(query_auth_options)).await
     }
 }
