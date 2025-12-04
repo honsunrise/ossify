@@ -1,14 +1,13 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::Method;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// ListParts request parameters
 #[skip_serializing_none]
@@ -97,21 +96,16 @@ pub struct ListParts {
 
 impl Ops for ListParts {
     type Response = BodyResponseProcessor<ListPartsResult>;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = ListPartsParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
+    fn prepare(self) -> Result<Prepared<ListPartsParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 
@@ -122,8 +116,8 @@ pub trait ListPartsOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/listparts>
     fn list_parts(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         params: Option<ListPartsParams>,
     ) -> impl Future<Output = Result<ListPartsResult>>;
 }
@@ -131,14 +125,14 @@ pub trait ListPartsOperations {
 impl ListPartsOperations for Client {
     async fn list_parts(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         params: Option<ListPartsParams>,
     ) -> Result<ListPartsResult> {
-        let final_params = params.unwrap_or_else(|| ListPartsParams::new(upload_id.as_ref()));
+        let final_params = params.unwrap_or_else(|| ListPartsParams::new(upload_id));
 
         let ops = ListParts {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params: final_params,
         };
         self.request(ops).await

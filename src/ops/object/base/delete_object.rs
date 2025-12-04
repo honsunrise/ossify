@@ -1,13 +1,12 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::Method;
 use serde::Serialize;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::EmptyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// DeleteObject request parameters
 #[derive(Debug, Clone, Default, Serialize)]
@@ -36,23 +35,16 @@ pub struct DeleteObject {
 
 impl Ops for DeleteObject {
     type Response = EmptyResponseProcessor;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = DeleteObjectParams;
 
-    fn method(&self) -> Method {
-        Method::DELETE
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        if self.params.version_id.is_some() {
-            Some(&self.params)
-        } else {
-            None
-        }
+    fn prepare(self) -> Result<Prepared<DeleteObjectParams>> {
+        Ok(Prepared {
+            method: Method::DELETE,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 
@@ -63,7 +55,7 @@ pub trait DeleteObjectOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/deleteobject>
     fn delete_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: Option<DeleteObjectParams>,
     ) -> impl Future<Output = Result<()>>;
 }
@@ -71,11 +63,11 @@ pub trait DeleteObjectOperations {
 impl DeleteObjectOperations for Client {
     async fn delete_object(
         &self,
-        object_key: impl AsRef<str>,
+        object_key: impl Into<String>,
         params: Option<DeleteObjectParams>,
     ) -> Result<()> {
         let ops = DeleteObject {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params: params.unwrap_or_default(),
         };
 

@@ -1,13 +1,21 @@
 use std::future::Future;
 
 use http::Method;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::ops::Owner;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::ser::OnlyKeyField;
+use crate::{Client, Ops, Prepared, Request};
+
+/// Get bucket info request parameters
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct GetBucketInfoParams {
+    #[serde(rename = "bucketInfo")]
+    bucket_info: OnlyKeyField,
+}
 
 /// Bucket detail information
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -36,11 +44,17 @@ pub struct GetBucketInfo {}
 
 impl Ops for GetBucketInfo {
     type Response = BodyResponseProcessor<BucketDetail>;
-    type Body = EmptyBody;
-    type Query = ();
+    type Body = NoneBody;
+    type Query = GetBucketInfoParams;
 
-    fn method(&self) -> Method {
-        Method::GET
+    fn prepare(self) -> Result<Prepared<GetBucketInfoParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            query: Some(GetBucketInfoParams {
+                bucket_info: OnlyKeyField,
+            }),
+            ..Default::default()
+        })
     }
 }
 

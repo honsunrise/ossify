@@ -1,13 +1,12 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::Method;
 use serde::Serialize;
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::EmptyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// AbortMultipartUpload request parameters
 #[derive(Debug, Clone, Serialize)]
@@ -32,21 +31,16 @@ pub struct AbortMultipartUpload {
 
 impl Ops for AbortMultipartUpload {
     type Response = EmptyResponseProcessor;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = AbortMultipartUploadParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::DELETE
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
+    fn prepare(self) -> Result<Prepared<AbortMultipartUploadParams>> {
+        Ok(Prepared {
+            method: Method::DELETE,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 
@@ -57,20 +51,20 @@ pub trait AbortMultipartUploadOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/abortmultipartupload>
     fn abort_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
     ) -> impl Future<Output = Result<()>>;
 }
 
 impl AbortMultipartUploadOperations for Client {
     async fn abort_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
     ) -> Result<()> {
         let ops = AbortMultipartUpload {
-            object_key: object_key.as_ref().to_string(),
-            params: AbortMultipartUploadParams::new(upload_id.as_ref()),
+            object_key: object_key.into(),
+            params: AbortMultipartUploadParams::new(upload_id),
         };
         self.request(ops).await
     }

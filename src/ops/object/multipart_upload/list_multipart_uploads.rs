@@ -3,16 +3,18 @@ use std::future::Future;
 use http::Method;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
 use crate::ser::OnlyKeyField;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// ListMultipartUploads request parameters
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct ListMultipartUploadsParams {
+    uploads: OnlyKeyField,
+
     /// Character used to group file names
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delimiter: Option<String>,
@@ -31,7 +33,6 @@ pub struct ListMultipartUploadsParams {
     /// Specify encoding for returned keys, currently supports URL encoding
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding_type: Option<String>,
-    uploads: OnlyKeyField,
 }
 
 impl ListMultipartUploadsParams {
@@ -179,17 +180,15 @@ pub struct ListMultipartUploads {
 
 impl Ops for ListMultipartUploads {
     type Response = BodyResponseProcessor<ListMultipartUploadsResult>;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = ListMultipartUploadsParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::GET
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
+    fn prepare(self) -> Result<Prepared<ListMultipartUploadsParams>> {
+        Ok(Prepared {
+            method: Method::GET,
+            query: Some(self.params),
+            ..Default::default()
+        })
     }
 }
 

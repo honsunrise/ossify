@@ -1,17 +1,18 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::future::Future;
 
 use bytes::Bytes;
+use futures::{TryStream, stream};
 use heck::ToKebabCase;
 use http::{HeaderMap, HeaderName, Method, header};
 use serde::{Deserialize, Serialize};
 
 use super::{ServerSideEncryption, StorageClass};
-use crate::body::BinaryBody;
+use crate::body::StreamBody;
 use crate::error::Result;
 use crate::response::HeaderResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{BoxError, Client, Ops, Prepared, Request, ser};
 
 /// PutObject request parameters (query parameters)
 #[derive(Debug, Clone, Default, Serialize)]
@@ -155,6 +156,88 @@ impl PutObjectOptions {
     }
 }
 
+impl PutObjectOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        // Set cache control
+        if let Some(cache_control) = self.cache_control {
+            headers.insert(header::CACHE_CONTROL, cache_control.parse()?);
+        }
+
+        // Set content disposition
+        if let Some(content_disposition) = self.content_disposition {
+            headers.insert(header::CONTENT_DISPOSITION, content_disposition.parse()?);
+        }
+
+        // Set content encoding
+        if let Some(content_encoding) = self.content_encoding {
+            headers.insert(header::CONTENT_ENCODING, content_encoding.parse()?);
+        }
+
+        // Set content type (overrides the default value set by BinaryBody)
+        if let Some(content_type) = self.content_type {
+            headers.insert(header::CONTENT_TYPE, content_type.parse()?);
+        }
+
+        // Set expiration time
+        if let Some(expires) = self.expires {
+            headers.insert(header::EXPIRES, expires.parse()?);
+        }
+
+        // Set Content-MD5
+        if let Some(content_md5) = self.content_md5 {
+            headers.insert(HeaderName::from_static("content-md5"), content_md5.parse()?);
+        }
+
+        // Set whether to forbid overwriting files with the same name
+        if let Some(forbid_overwrite) = self.forbid_overwrite {
+            headers.insert(
+                HeaderName::from_static("x-oss-forbid-overwrite"),
+                forbid_overwrite.to_string().parse()?,
+            );
+        }
+
+        // Set storage class
+        if let Some(storage_class) = self.storage_class {
+            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
+        }
+
+        // Set server-side encryption method
+        if let Some(encryption) = self.server_side_encryption {
+            headers.insert(
+                HeaderName::from_static("x-oss-server-side-encryption"),
+                encryption.as_ref().parse()?,
+            );
+        }
+
+        // Set KMS key ID
+        if let Some(key_id) = self.server_side_encryption_key_id {
+            headers.insert(HeaderName::from_static("x-oss-server-side-encryption-key-id"), key_id.parse()?);
+        }
+
+        // Set object ACL
+        if let Some(acl) = self.object_acl {
+            headers.insert(HeaderName::from_static("x-oss-object-acl"), acl.parse()?);
+        }
+
+        // Set user-defined metadata
+        for (key, value) in self.user_meta {
+            let key = key.to_kebab_case().to_lowercase();
+            let header_name = format!("x-oss-meta-{key}");
+            headers.insert(HeaderName::from_bytes(header_name.as_bytes())?, value.parse()?);
+        }
+
+        // Set object tags
+        if !self.tagging.is_empty() {
+            let tagging_str = ser::to_string(&self.tagging)?;
+            headers.insert(HeaderName::from_static("x-oss-tagging"), tagging_str.parse()?);
+        }
+
+        Ok(headers)
+    }
+}
+
 /// PutObject response (mainly obtained from response headers)
 #[derive(Debug, Clone, Deserialize)]
 pub struct PutObjectResponse {
@@ -176,128 +259,32 @@ pub struct PutObjectResponse {
 }
 
 /// PutObject operation
-pub struct PutObject {
+pub struct PutObject<S> {
     pub object_key: String,
     pub params: PutObjectParams,
-    pub options: Option<PutObjectOptions>,
-    pub body: Bytes,
+    pub options: PutObjectOptions,
+    pub stream_body: S,
 }
 
-impl Ops for PutObject {
+impl<S> Ops for PutObject<S>
+where
+    S: TryStream + Send + 'static,
+    S::Error: Into<BoxError>,
+    Bytes: From<S::Ok>,
+{
     type Response = HeaderResponseProcessor<PutObjectResponse>;
-    type Body = BinaryBody;
+    type Body = StreamBody<S>;
     type Query = PutObjectParams;
 
-    fn method(&self) -> Method {
-        Method::PUT
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        if self.params.version_id.is_some() {
-            Some(&self.params)
-        } else {
-            None
-        }
-    }
-
-    fn body(&self) -> Option<&Bytes> {
-        Some(&self.body)
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-        let Some(options) = &self.options else {
-            return Ok(None);
-        };
-
-        // Set cache control
-        if let Some(cache_control) = &options.cache_control {
-            headers.insert(header::CACHE_CONTROL, cache_control.parse()?);
-        }
-
-        // Set content disposition
-        if let Some(content_disposition) = &options.content_disposition {
-            headers.insert(header::CONTENT_DISPOSITION, content_disposition.parse()?);
-        }
-
-        // Set content encoding
-        if let Some(content_encoding) = &options.content_encoding {
-            headers.insert(header::CONTENT_ENCODING, content_encoding.parse()?);
-        }
-
-        // Set content type (overrides the default value set by BinaryBody)
-        if let Some(content_type) = &options.content_type {
-            headers.insert(header::CONTENT_TYPE, content_type.parse()?);
-        }
-
-        // Set expiration time
-        if let Some(expires) = &options.expires {
-            headers.insert(header::EXPIRES, expires.parse()?);
-        }
-
-        // Set Content-MD5
-        if let Some(content_md5) = &options.content_md5 {
-            headers.insert(HeaderName::from_static("content-md5"), content_md5.parse()?);
-        }
-
-        // Set whether to forbid overwriting files with the same name
-        if let Some(forbid_overwrite) = &options.forbid_overwrite {
-            headers.insert(
-                HeaderName::from_static("x-oss-forbid-overwrite"),
-                forbid_overwrite.to_string().parse()?,
-            );
-        }
-
-        // Set storage class
-        if let Some(storage_class) = &options.storage_class {
-            headers.insert(HeaderName::from_static("x-oss-storage-class"), storage_class.as_ref().parse()?);
-        }
-
-        // Set server-side encryption method
-        if let Some(encryption) = &options.server_side_encryption {
-            headers.insert(
-                HeaderName::from_static("x-oss-server-side-encryption"),
-                encryption.as_ref().parse()?,
-            );
-        }
-
-        // Set KMS key ID
-        if let Some(key_id) = &options.server_side_encryption_key_id {
-            headers.insert(HeaderName::from_static("x-oss-server-side-encryption-key-id"), key_id.parse()?);
-        }
-
-        // Set object ACL
-        if let Some(acl) = &options.object_acl {
-            headers.insert(HeaderName::from_static("x-oss-object-acl"), acl.parse()?);
-        }
-
-        // Set user-defined metadata
-        for (key, value) in &options.user_meta {
-            let key = key.to_kebab_case().to_lowercase();
-            let header_name = format!("x-oss-meta-{key}");
-            headers.insert(HeaderName::from_bytes(header_name.as_bytes())?, value.parse()?);
-        }
-
-        // Set object tags
-        if !options.tagging.is_empty() {
-            let tagging_str = options
-                .tagging
-                .iter()
-                .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
-                .collect::<Vec<_>>()
-                .join("&");
-            headers.insert(HeaderName::from_static("x-oss-tagging"), tagging_str.parse()?);
-        }
-
-        if headers.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(headers))
-        }
+    fn prepare(self) -> Result<Prepared<PutObjectParams, S>> {
+        Ok(Prepared {
+            method: Method::PUT,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers()?),
+            body: Some(self.stream_body),
+            ..Default::default()
+        })
     }
 }
 
@@ -306,26 +293,68 @@ pub trait PutObjectOperations {
     /// Upload an object to OSS
     ///
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/putobject>
-    fn put_object(
+    fn put_object<T>(
         &self,
-        object_key: impl AsRef<str>,
-        data: &[u8],
+        object_key: impl Into<String>,
+        body: T,
         options: Option<PutObjectOptions>,
-    ) -> impl Future<Output = Result<PutObjectResponse>>;
+    ) -> impl Future<Output = Result<PutObjectResponse>>
+    where
+        T: Send + 'static,
+        Bytes: From<T>;
+
+    /// Upload an object to OSS
+    ///
+    /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/putobject>
+    fn put_object_stream<S>(
+        &self,
+        object_key: impl Into<String>,
+        body: S,
+        options: Option<PutObjectOptions>,
+    ) -> impl Future<Output = Result<PutObjectResponse>>
+    where
+        S: TryStream + Send + 'static,
+        S::Error: Into<BoxError>,
+        Bytes: From<S::Ok>;
 }
 
 impl PutObjectOperations for Client {
-    async fn put_object(
+    async fn put_object<T>(
         &self,
-        object_key: impl AsRef<str>,
-        data: &[u8],
+        object_key: impl Into<String>,
+        body: T,
         options: Option<PutObjectOptions>,
-    ) -> Result<PutObjectResponse> {
+    ) -> Result<PutObjectResponse>
+    where
+        T: Send + 'static,
+        Bytes: From<T>,
+    {
         let ops = PutObject {
-            object_key: object_key.as_ref().to_string(),
+            object_key: object_key.into(),
             params: PutObjectParams::new(),
-            options,
-            body: Bytes::copy_from_slice(data),
+            options: options.unwrap_or_default(),
+            stream_body: stream::once(async move { Result::<Bytes, Infallible>::Ok(body.into()) }),
+        };
+
+        self.request(ops).await
+    }
+
+    async fn put_object_stream<S>(
+        &self,
+        object_key: impl Into<String>,
+        stream: S,
+        options: Option<PutObjectOptions>,
+    ) -> Result<PutObjectResponse>
+    where
+        S: TryStream + Send + 'static,
+        S::Error: Into<BoxError>,
+        Bytes: From<S::Ok>,
+    {
+        let ops = PutObject {
+            object_key: object_key.into(),
+            params: PutObjectParams::new(),
+            options: options.unwrap_or_default(),
+            stream_body: stream,
         };
 
         self.request(ops).await

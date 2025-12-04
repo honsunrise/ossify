@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::future::Future;
 
 use http::{HeaderMap, HeaderName, Method};
@@ -8,7 +7,7 @@ use serde_with::skip_serializing_none;
 use crate::body::XMLBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// CompleteMultipartUpload request parameters
 #[derive(Debug, Clone, Serialize)]
@@ -42,6 +41,39 @@ pub struct CompleteMultipartUploadOptions {
     pub complete_all: Option<bool>,
     /// Object access permissions
     pub object_acl: Option<String>,
+}
+
+impl CompleteMultipartUploadOptions {
+    pub fn new() -> Self {
+        Self {
+            forbid_overwrite: None,
+            complete_all: None,
+            object_acl: None,
+        }
+    }
+}
+
+impl CompleteMultipartUploadOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(forbid_overwrite) = self.forbid_overwrite {
+            headers.insert(
+                HeaderName::from_static("x-oss-forbid-overwrite"),
+                forbid_overwrite.to_string().parse()?,
+            );
+        }
+
+        if let Some(object_acl) = self.object_acl {
+            headers.insert(HeaderName::from_static("x-oss-object-acl"), object_acl.parse()?);
+        }
+
+        if let Some(complete_all) = self.complete_all {
+            headers.insert(HeaderName::from_static("x-oss-complete-all"), complete_all.to_string().parse()?);
+        }
+
+        Ok(headers)
+    }
 }
 
 /// Part information
@@ -114,7 +146,7 @@ pub struct CompleteMultipartUpload {
     pub object_key: String,
     pub params: CompleteMultipartUploadParams,
     pub body: Option<CompleteMultipartUploadBody>,
-    pub options: Option<CompleteMultipartUploadOptions>,
+    pub options: CompleteMultipartUploadOptions,
 }
 
 impl Ops for CompleteMultipartUpload {
@@ -122,46 +154,15 @@ impl Ops for CompleteMultipartUpload {
     type Body = XMLBody<CompleteMultipartUploadBody>;
     type Query = CompleteMultipartUploadParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::POST
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-        let Some(options) = &self.options else {
-            return Ok(None);
-        };
-
-        if let Some(forbid_overwrite) = &options.forbid_overwrite {
-            headers.insert(
-                HeaderName::from_static("x-oss-forbid-overwrite"),
-                forbid_overwrite.to_string().parse()?,
-            );
-        }
-
-        if let Some(object_acl) = &options.object_acl {
-            headers.insert(HeaderName::from_static("x-oss-object-acl"), object_acl.parse()?);
-        }
-
-        if let Some(complete_all) = &options.complete_all {
-            headers.insert(HeaderName::from_static("x-oss-complete-all"), complete_all.to_string().parse()?);
-        }
-
-        Ok(Some(headers))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
-    }
-
-    fn body(&self) -> Option<&CompleteMultipartUploadBody> {
-        self.body.as_ref()
+    fn prepare(self) -> Result<Prepared<CompleteMultipartUploadParams, CompleteMultipartUploadBody>> {
+        Ok(Prepared {
+            method: Method::POST,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers()?),
+            body: self.body,
+            ..Default::default()
+        })
     }
 }
 
@@ -172,8 +173,8 @@ pub trait CompleteMultipartUploadOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/completemultipartupload>
     fn complete_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         parts: Vec<Part>,
         options: Option<CompleteMultipartUploadOptions>,
     ) -> impl Future<Output = Result<CompleteMultipartUploadResult>>;
@@ -181,8 +182,8 @@ pub trait CompleteMultipartUploadOperations {
     /// Automatically complete multipart upload (server lists and sorts all parts)
     fn complete_multipart_upload_auto(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         options: Option<CompleteMultipartUploadOptions>,
     ) -> impl Future<Output = Result<CompleteMultipartUploadResult>>;
 }
@@ -190,8 +191,8 @@ pub trait CompleteMultipartUploadOperations {
 impl CompleteMultipartUploadOperations for Client {
     async fn complete_multipart_upload(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         parts: Vec<Part>,
         options: Option<CompleteMultipartUploadOptions>,
     ) -> Result<CompleteMultipartUploadResult> {
@@ -199,28 +200,28 @@ impl CompleteMultipartUploadOperations for Client {
         sorted_parts.sort_by_key(|p| p.part_number);
 
         let ops = CompleteMultipartUpload {
-            object_key: object_key.as_ref().to_string(),
-            params: CompleteMultipartUploadParams::new(upload_id.as_ref()),
+            object_key: object_key.into(),
+            params: CompleteMultipartUploadParams::new(upload_id),
             body: Some(CompleteMultipartUploadBody::new(sorted_parts)),
-            options,
+            options: options.unwrap_or_default(),
         };
         self.request(ops).await
     }
 
     async fn complete_multipart_upload_auto(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         options: Option<CompleteMultipartUploadOptions>,
     ) -> Result<CompleteMultipartUploadResult> {
         let mut auto_options = options.unwrap_or_default();
         auto_options.complete_all = Some(true);
 
         let ops = CompleteMultipartUpload {
-            object_key: object_key.as_ref().to_string(),
-            params: CompleteMultipartUploadParams::new(upload_id.as_ref()),
+            object_key: object_key.into(),
+            params: CompleteMultipartUploadParams::new(upload_id),
             body: None, // No need to provide body when auto-completing
-            options: Some(auto_options),
+            options: auto_options,
         };
         self.request(ops).await
     }

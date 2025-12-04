@@ -1,6 +1,6 @@
 [package]
 name = "ossify"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Honsun Zhu <honsun@linux.com>"]
 edition = "2024"
 rust-version = "1.85"
@@ -19,6 +19,7 @@ anyhow = "1.0"
 base64 = "0.22"
 bytes = "1.0"
 chrono = "0.4"
+futures = "0.3"
 heck = "0.5"
 hex = "0.4"
 hmac = "0.12"

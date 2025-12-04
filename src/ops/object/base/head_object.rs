@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::future::Future;
 use std::str::FromStr;
 
@@ -7,10 +6,10 @@ use http::{HeaderMap, Method, header};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::StorageClass;
-use crate::body::EmptyBody;
+use crate::body::NoneBody;
 use crate::error::Result;
 use crate::response::HeaderResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// OSS object type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -149,11 +148,36 @@ pub struct HeadObjectParams {
     pub version_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct HeadObjectOptions {
     pub if_modified_since: Option<String>,
     pub if_unmodified_since: Option<String>,
     pub if_match: Option<String>,
     pub if_none_match: Option<String>,
+}
+
+impl HeadObjectOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(if_modified_since) = &self.if_modified_since {
+            headers.insert(header::IF_MODIFIED_SINCE, if_modified_since.parse()?);
+        }
+
+        if let Some(if_unmodified_since) = &self.if_unmodified_since {
+            headers.insert(header::IF_UNMODIFIED_SINCE, if_unmodified_since.parse()?);
+        }
+
+        if let Some(if_match) = &self.if_match {
+            headers.insert(header::IF_MATCH, if_match.parse()?);
+        }
+
+        if let Some(if_none_match) = &self.if_none_match {
+            headers.insert(header::IF_NONE_MATCH, if_none_match.parse()?);
+        }
+
+        Ok(headers)
+    }
 }
 
 /// HeadObjectRequest builder
@@ -223,49 +247,22 @@ impl Default for HeadObjectRequestBuilder {
 pub struct HeadObject {
     pub object_name: String,
     pub params: HeadObjectParams,
-    pub options: Option<HeadObjectOptions>,
+    pub options: HeadObjectOptions,
 }
 
 impl Ops for HeadObject {
     type Response = HeaderResponseProcessor<HeadObjectResponse>;
-    type Body = EmptyBody;
+    type Body = NoneBody;
     type Query = HeadObjectParams;
 
-    fn method(&self) -> Method {
-        Method::HEAD
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_name))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
-    }
-
-    fn headers(&self) -> Result<Option<HeaderMap>> {
-        let mut headers = HeaderMap::new();
-        let Some(options) = &self.options else {
-            return Ok(None);
-        };
-
-        if let Some(if_modified_since) = &options.if_modified_since {
-            headers.insert(header::IF_MODIFIED_SINCE, if_modified_since.parse()?);
-        }
-
-        if let Some(if_unmodified_since) = &options.if_unmodified_since {
-            headers.insert(header::IF_UNMODIFIED_SINCE, if_unmodified_since.parse()?);
-        }
-
-        if let Some(if_match) = &options.if_match {
-            headers.insert(header::IF_MATCH, if_match.parse()?);
-        }
-
-        if let Some(if_none_match) = &options.if_none_match {
-            headers.insert(header::IF_NONE_MATCH, if_none_match.parse()?);
-        }
-
-        Ok(Some(headers))
+    fn prepare(self) -> Result<Prepared<HeadObjectParams>> {
+        Ok(Prepared {
+            method: Method::HEAD,
+            key: Some(self.object_name),
+            query: Some(self.params),
+            headers: Some(self.options.into_headers()?),
+            ..Default::default()
+        })
     }
 }
 
@@ -276,7 +273,7 @@ pub trait HeadObjectOperations {
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/headobject>
     fn head_object(
         &self,
-        object_name: impl AsRef<str>,
+        object_name: impl Into<String>,
         params: HeadObjectParams,
         options: Option<HeadObjectOptions>,
     ) -> impl Future<Output = Result<HeadObjectResponse>>;
@@ -285,14 +282,14 @@ pub trait HeadObjectOperations {
 impl HeadObjectOperations for Client {
     async fn head_object(
         &self,
-        object_name: impl AsRef<str>,
+        object_name: impl Into<String>,
         params: HeadObjectParams,
         options: Option<HeadObjectOptions>,
     ) -> Result<HeadObjectResponse> {
         let ops = HeadObject {
-            object_name: object_name.as_ref().to_string(),
+            object_name: object_name.into(),
             params,
-            options,
+            options: options.unwrap_or_default(),
         };
 
         self.request(ops).await

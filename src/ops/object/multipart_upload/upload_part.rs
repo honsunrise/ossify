@@ -1,14 +1,15 @@
-use std::borrow::Cow;
+use std::convert::Infallible;
 use std::future::Future;
 
 use bytes::Bytes;
+use futures::{TryStream, stream};
 use http::Method;
 use serde::{Deserialize, Serialize};
 
-use crate::body::BinaryBody;
+use crate::body::StreamBody;
 use crate::error::Result;
 use crate::response::HeaderResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{BoxError, Client, Ops, Prepared, Request};
 
 /// UploadPart request parameters
 #[derive(Debug, Clone, Serialize)]
@@ -38,33 +39,30 @@ pub struct UploadPartResult {
 }
 
 /// UploadPart operation
-pub struct UploadPart {
+pub struct UploadPart<S> {
     pub object_key: String,
     pub params: UploadPartParams,
-    pub body: Bytes,
+    pub stream_body: S,
 }
 
-impl Ops for UploadPart {
+impl<S> Ops for UploadPart<S>
+where
+    S: TryStream + Send + 'static,
+    S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    Bytes: From<S::Ok>,
+{
     type Response = HeaderResponseProcessor<UploadPartResult>;
-    type Body = BinaryBody;
+    type Body = StreamBody<S>;
     type Query = UploadPartParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::PUT
-    }
-
-    fn key<'a>(&'a self) -> Option<Cow<'a, str>> {
-        Some(Cow::Borrowed(&self.object_key))
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.params)
-    }
-
-    fn body(&self) -> Option<&Bytes> {
-        Some(&self.body)
+    fn prepare(self) -> Result<Prepared<UploadPartParams, S>> {
+        Ok(Prepared {
+            method: Method::PUT,
+            key: Some(self.object_key),
+            query: Some(self.params),
+            body: Some(self.stream_body),
+            ..Default::default()
+        })
     }
 }
 
@@ -73,27 +71,69 @@ pub trait UploadPartOperations {
     /// Upload part
     ///
     /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/uploadpart>
-    fn upload_part(
+    fn upload_part<T>(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         part_number: u32,
-        data: &[u8],
-    ) -> impl Future<Output = Result<UploadPartResult>>;
+        body: T,
+    ) -> impl Future<Output = Result<UploadPartResult>>
+    where
+        T: Send + 'static,
+        Bytes: From<T>;
+
+    /// Upload part
+    ///
+    /// Official documentation: <https://www.alibabacloud.com/help/en/oss/developer-reference/uploadpart>
+    fn upload_part_stream<S>(
+        &self,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
+        part_number: u32,
+        stream: S,
+    ) -> impl Future<Output = Result<UploadPartResult>>
+    where
+        S: TryStream + Send + 'static,
+        S::Error: Into<BoxError>,
+        Bytes: From<S::Ok>;
 }
 
 impl UploadPartOperations for Client {
-    async fn upload_part(
+    async fn upload_part<T>(
         &self,
-        object_key: impl AsRef<str>,
-        upload_id: impl AsRef<str>,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
         part_number: u32,
-        data: &[u8],
-    ) -> Result<UploadPartResult> {
+        body: T,
+    ) -> Result<UploadPartResult>
+    where
+        T: Send + 'static,
+        Bytes: From<T>,
+    {
         let ops = UploadPart {
-            object_key: object_key.as_ref().to_string(),
-            params: UploadPartParams::new(part_number, upload_id.as_ref()),
-            body: Bytes::copy_from_slice(data),
+            object_key: object_key.into(),
+            params: UploadPartParams::new(part_number, upload_id),
+            stream_body: stream::once(async move { Result::<Bytes, Infallible>::Ok(body.into()) }),
+        };
+        self.request(ops).await
+    }
+
+    async fn upload_part_stream<S>(
+        &self,
+        object_key: impl Into<String>,
+        upload_id: impl Into<String>,
+        part_number: u32,
+        stream: S,
+    ) -> Result<UploadPartResult>
+    where
+        S: TryStream + Send + 'static,
+        S::Error: Into<BoxError>,
+        Bytes: From<S::Ok>,
+    {
+        let ops = UploadPart {
+            object_key: object_key.into(),
+            params: UploadPartParams::new(part_number, upload_id),
+            stream_body: stream,
         };
         self.request(ops).await
     }

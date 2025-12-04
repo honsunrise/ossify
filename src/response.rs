@@ -25,7 +25,7 @@ impl fmt::Display for ErrorResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "code={}, message={}, request_id={}, host_id={}, ec={:?}, recommend_doc={}",
+            "code={}, message={}, request_id={}, host_id={}, ec={}, recommend_doc={}",
             self.code, self.message, self.request_id, self.host_id, self.ec, self.recommend_doc
         )
     }
@@ -47,13 +47,13 @@ async fn process_response_error(resp: reqwest::Response) -> Result<Error> {
     })
 }
 
-pub(crate) trait ResponseProcessor {
+pub trait ResponseProcessor {
     type Output;
 
     fn from_response(response: reqwest::Response) -> impl Future<Output = Result<Self::Output>>;
 }
 
-pub(crate) struct EmptyResponseProcessor;
+pub struct EmptyResponseProcessor;
 
 impl ResponseProcessor for EmptyResponseProcessor {
     type Output = ();
@@ -63,7 +63,7 @@ impl ResponseProcessor for EmptyResponseProcessor {
     }
 }
 
-pub(crate) struct BinaryResponseProcessor;
+pub struct BinaryResponseProcessor;
 
 impl ResponseProcessor for BinaryResponseProcessor {
     type Output = Bytes;
@@ -78,7 +78,7 @@ impl ResponseProcessor for BinaryResponseProcessor {
     }
 }
 
-pub(crate) struct HeaderResponseProcessor<T>(PhantomData<T>);
+pub struct HeaderResponseProcessor<T>(PhantomData<T>);
 
 impl<T> ResponseProcessor for HeaderResponseProcessor<T>
 where
@@ -102,7 +102,7 @@ where
     }
 }
 
-pub(crate) struct BodyResponseProcessor<T>(PhantomData<T>);
+pub struct BodyResponseProcessor<T>(PhantomData<T>);
 
 impl<T> ResponseProcessor for BodyResponseProcessor<T>
 where

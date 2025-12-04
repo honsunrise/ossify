@@ -10,7 +10,7 @@ use crate::body::XMLBody;
 use crate::error::Result;
 use crate::response::BodyResponseProcessor;
 use crate::ser::OnlyKeyField;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request};
 
 /// Query mode
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -469,18 +469,13 @@ impl Ops for DoMetaQuery {
     type Body = XMLBody<MetaQueryBody>;
     type Query = DoMetaQueryParams;
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::POST
-    }
-
-    fn query(&self) -> Option<&Self::Query> {
-        Some(&self.query)
-    }
-
-    fn body(&self) -> Option<&MetaQueryBody> {
-        Some(&self.body)
+    fn prepare(self) -> Result<Prepared<DoMetaQueryParams, MetaQueryBody>> {
+        Ok(Prepared {
+            method: Method::POST,
+            query: Some(self.query),
+            body: Some(self.body),
+            ..Default::default()
+        })
     }
 }
 

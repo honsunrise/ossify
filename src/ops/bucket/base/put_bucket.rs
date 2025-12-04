@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::future::Future;
 
-use http::Method;
+use http::{HeaderMap, HeaderName, Method};
 use serde::{Deserialize, Serialize};
 
-use crate::body::EmptyBody;
+use crate::body::XMLBody;
 use crate::error::Result;
 use crate::response::EmptyResponseProcessor;
-use crate::{Client, Ops, Request};
+use crate::{Client, Ops, Prepared, Request, ser};
 
 /// Represents the access control list (ACL) for a bucket in Aliyun OSS.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -100,21 +100,43 @@ pub struct PutBucketOptions {
     pub tags: HashMap<String, String>,
 }
 
+impl PutBucketOptions {
+    fn into_headers(self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(acl) = self.acl {
+            headers.insert(HeaderName::from_static("x-oss-acl"), acl.as_str().parse()?);
+        }
+        if let Some(resource_group_id) = self.resource_group_id {
+            headers.insert(HeaderName::from_static("x-oss-resource-group-id"), resource_group_id.parse()?);
+        }
+        if !self.tags.is_empty() {
+            let tags_str = ser::to_string(&self.tags)?;
+            headers.insert(HeaderName::from_static("x-oss-bucket-tagging"), tags_str.parse()?);
+        }
+
+        Ok(headers)
+    }
+}
+
 /// Put bucket operation
 pub struct PutBucket {
     pub config: PutBucketConfiguration,
-    pub options: Option<PutBucketOptions>,
+    pub options: PutBucketOptions,
 }
 
 impl Ops for PutBucket {
     type Response = EmptyResponseProcessor;
-    type Body = EmptyBody;
+    type Body = XMLBody<PutBucketConfiguration>;
     type Query = ();
 
-    const PRODUCT: &'static str = "oss";
-
-    fn method(&self) -> Method {
-        Method::PUT
+    fn prepare(self) -> Result<Prepared<(), PutBucketConfiguration>> {
+        Ok(Prepared {
+            method: Method::PUT,
+            body: Some(self.config),
+            headers: Some(self.options.into_headers()?),
+            ..Default::default()
+        })
     }
 }
 
@@ -135,7 +157,10 @@ impl PutBucketOps for Client {
         config: PutBucketConfiguration,
         options: Option<PutBucketOptions>,
     ) -> Result<()> {
-        let ops = PutBucket { config, options };
+        let ops = PutBucket {
+            config,
+            options: options.unwrap_or_default(),
+        };
         self.request(ops).await
     }
 }

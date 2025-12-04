@@ -45,7 +45,7 @@ pub trait BucketOperations {
     /// Official document: <https://www.alibabacloud.com/help/en/oss/developer-reference/listobjectsv2>
     fn list_objects(
         &self,
-        options: Option<ListObjectsOptions>,
+        params: Option<ListObjectsV2Params>,
     ) -> impl Future<Output = Result<ListObjectsResult>>;
 
     /// Delete a bucket
@@ -79,8 +79,8 @@ impl BucketOperations for Client {
         base::GetBucketStatOps::get_bucket_stat(self).await
     }
 
-    async fn list_objects(&self, options: Option<ListObjectsOptions>) -> Result<ListObjectsResult> {
-        base::ListObjectsOps::list_objects(self, options).await
+    async fn list_objects(&self, params: Option<ListObjectsV2Params>) -> Result<ListObjectsResult> {
+        base::ListObjectsOps::list_objects(self, params).await
     }
 
     async fn delete_bucket(&self) -> Result<()> {
