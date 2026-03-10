@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset};
 use http::{HeaderMap, Method, header};
+use jiff::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::StorageClass;
@@ -80,12 +80,19 @@ where
     s.parse().map_err(serde::de::Error::custom)
 }
 
-fn deserialize_datetime<'de, D>(deserializer: D) -> std::result::Result<DateTime<FixedOffset>, D::Error>
+fn deserialize_datetime<'de, D>(deserializer: D) -> std::result::Result<Timestamp, D::Error>
 where
     D: Deserializer<'de>,
 {
+    use jiff::fmt::rfc2822;
+
+    const RFC2822_PARSER: rfc2822::DateTimeParser = rfc2822::DateTimeParser::new();
+
     let s = String::deserialize(deserializer)?;
-    DateTime::parse_from_rfc2822(&s).map_err(serde::de::Error::custom)
+    let timestamp = RFC2822_PARSER
+        .parse_timestamp(s)
+        .map_err(serde::de::Error::custom)?;
+    Ok(timestamp)
 }
 
 /// HeadObject response
@@ -99,10 +106,10 @@ pub struct HeadObjectResponse {
     pub content_type: String,
     /// Creation time
     #[serde(deserialize_with = "deserialize_datetime")]
-    pub date: DateTime<FixedOffset>,
+    pub date: Timestamp,
     /// Last modified time
     #[serde(deserialize_with = "deserialize_datetime")]
-    pub last_modified: DateTime<FixedOffset>,
+    pub last_modified: Timestamp,
     /// ETag
     #[serde(rename = "etag")]
     pub etag: Option<String>,
