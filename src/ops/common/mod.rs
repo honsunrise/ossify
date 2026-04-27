@@ -9,15 +9,23 @@
 mod acl;
 mod encoding_type;
 mod encryption;
+mod lifecycle;
 mod object_type;
 mod owner;
 mod redundancy_transition;
 mod storage_class;
+mod tag;
 
 pub use acl::BucketAcl;
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
+pub use lifecycle::{
+    AbortIncompleteMultipartUpload, LifecycleConfiguration, LifecycleExpiration, LifecycleFilter,
+    LifecycleFilterNot, LifecycleRule, LifecycleRuleStatus, LifecycleTransition,
+    NoncurrentVersionExpiration, NoncurrentVersionTransition,
+};
 pub use object_type::ObjectType;
 pub use owner::Owner;
 pub use redundancy_transition::RedundancyTransitionStatus;
 pub use storage_class::{DataRedundancyType, StorageClass};
+pub use tag::Tag;
