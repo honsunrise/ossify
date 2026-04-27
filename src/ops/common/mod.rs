@@ -13,6 +13,7 @@ mod lifecycle;
 mod object_type;
 mod owner;
 mod redundancy_transition;
+mod replication;
 mod storage_class;
 mod tag;
 
@@ -27,5 +28,13 @@ pub use lifecycle::{
 pub use object_type::ObjectType;
 pub use owner::Owner;
 pub use redundancy_transition::RedundancyTransitionStatus;
+pub use replication::{
+    HistoricalObjectReplication, LocationTransferType, LocationTransferTypeConstraint, PrefixSet,
+    ReplicationAction, ReplicationConfiguration, ReplicationDestination,
+    ReplicationEncryptionConfiguration, ReplicationLocation, ReplicationProgressInfo,
+    ReplicationRule, ReplicationRuleStatus, Rtc, RtcStatus, SourceSelectionCriteria,
+    SseKmsEncryptedObjects, SseKmsStatus, TransferType, UserTagging, UserTaggingFilterType,
+    UserTaggings,
+};
 pub use storage_class::{DataRedundancyType, StorageClass};
 pub use tag::Tag;
