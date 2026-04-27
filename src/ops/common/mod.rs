@@ -44,4 +44,4 @@ pub use replication::{
     UserTaggings,
 };
 pub use storage_class::{DataRedundancyType, StorageClass};
-pub use tag::Tag;
+pub use tag::{Tag, TagSet, Tagging};

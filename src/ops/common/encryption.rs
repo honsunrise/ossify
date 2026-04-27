@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 /// Server-side encryption algorithm. Used via the `x-oss-server-side-encryption`
 /// header on `PutObject`, `CopyObject`, `InitiateMultipartUpload`, and via XML
 /// on the bucket encryption and KMS related operations.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ServerSideEncryption {
     /// AES-256 encryption managed by OSS.
+    #[default]
     #[serde(rename = "AES256")]
     Aes256,
     /// Keys managed by Alibaba Cloud KMS.
