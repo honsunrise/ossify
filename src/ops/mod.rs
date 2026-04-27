@@ -3,4 +3,7 @@ pub mod common;
 pub mod object;
 pub mod service;
 
-pub use common::{DataRedundancyType, EncodingType, ObjectType, Owner, ServerSideEncryption, StorageClass};
+pub use common::{
+    DataRedundancyType, EncodingType, ObjectType, Owner, RedundancyTransitionStatus,
+    ServerSideEncryption, StorageClass,
+};

@@ -10,10 +10,12 @@ mod encoding_type;
 mod encryption;
 mod object_type;
 mod owner;
+mod redundancy_transition;
 mod storage_class;
 
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
 pub use object_type::ObjectType;
 pub use owner::Owner;
+pub use redundancy_transition::RedundancyTransitionStatus;
 pub use storage_class::{DataRedundancyType, StorageClass};
