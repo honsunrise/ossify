@@ -13,6 +13,7 @@ mod encoding_type;
 mod encryption;
 mod inventory;
 mod lifecycle;
+mod object_fc_access_point;
 mod object_type;
 mod owner;
 mod redundancy_transition;
@@ -37,6 +38,12 @@ pub use lifecycle::{
     AbortIncompleteMultipartUpload, LifecycleConfiguration, LifecycleExpiration, LifecycleFilter,
     LifecycleFilterNot, LifecycleRule, LifecycleRuleStatus, LifecycleTransition,
     NoncurrentVersionExpiration, NoncurrentVersionTransition,
+};
+pub use object_fc_access_point::{
+    AccessPointForObjectProcessSummary, ObjectFcAccessPointStatus, ObjectFcActions,
+    ObjectFcAllowedFeatures, ObjectFcContentTransformation, ObjectFcEndpoints,
+    ObjectFcFunctionCompute, ObjectFcTransformationConfiguration,
+    ObjectFcTransformationConfigurations, ObjectProcessConfiguration,
 };
 pub use object_type::ObjectType;
 pub use owner::Owner;
