@@ -1,5 +1,6 @@
 pub mod access_monitor;
 pub mod acl;
+pub mod anti_ddos;
 pub mod archive_direct_read;
 pub mod base;
 pub mod cname;
@@ -27,6 +28,7 @@ pub mod website;
 // every bucket-level type and trait.
 pub use access_monitor::*;
 pub use acl::*;
+pub use anti_ddos::*;
 pub use archive_direct_read::*;
 pub use base::*;
 pub use cname::*;

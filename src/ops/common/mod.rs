@@ -7,6 +7,7 @@
 //! operations.
 
 mod acl;
+mod anti_ddos;
 mod encoding_type;
 mod encryption;
 mod inventory;
@@ -19,6 +20,9 @@ mod storage_class;
 mod tag;
 
 pub use acl::BucketAcl;
+pub use anti_ddos::{
+    AntiDdosCnames, AntiDdosConfiguration, AntiDdosListConfiguration, AntiDdosStatus, AntiDdosType,
+};
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
 pub use inventory::{
