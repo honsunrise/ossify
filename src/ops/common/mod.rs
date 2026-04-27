@@ -9,6 +9,7 @@
 mod acl;
 mod encoding_type;
 mod encryption;
+mod inventory;
 mod lifecycle;
 mod object_type;
 mod owner;
@@ -20,6 +21,12 @@ mod tag;
 pub use acl::BucketAcl;
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
+pub use inventory::{
+    IncludedObjectVersions, IncrementalInventory, IncrementalInventorySchedule,
+    InventoryConfiguration, InventoryDestination, InventoryEncryption, InventoryFilter,
+    InventoryFormat, InventoryFrequency, InventoryOptionalField, InventorySchedule,
+    OptionalFields, OssBucketDestination, SseKmsInventoryEncryption, SseOssEncryption,
+};
 pub use lifecycle::{
     AbortIncompleteMultipartUpload, LifecycleConfiguration, LifecycleExpiration, LifecycleFilter,
     LifecycleFilterNot, LifecycleRule, LifecycleRuleStatus, LifecycleTransition,

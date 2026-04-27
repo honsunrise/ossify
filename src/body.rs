@@ -56,6 +56,23 @@ where
     }
 }
 
+/// Body of pre-serialized bytes with an explicit Content-Type. Useful for
+/// operations like `PutBucketPolicy` that accept a raw JSON payload.
+pub struct BytesBody;
+
+impl MakeBody for BytesBody {
+    type Body = (Bytes, &'static str);
+
+    fn make_body(body: Self::Body, request: &mut reqwest::Request) -> Result<()> {
+        let (bytes, content_type) = body;
+        let headers = request.headers_mut();
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_str(&bytes.len().to_string())?);
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+        request.body_mut().replace(Body::from(bytes));
+        Ok(())
+    }
+}
+
 pub struct StreamBody<S>(PhantomData<S>);
 
 impl<S> MakeBody for StreamBody<S>
