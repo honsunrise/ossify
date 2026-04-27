@@ -1,16 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// Object type
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum ObjectType {
-    #[default]
-    #[serde(rename = "Normal")]
-    Normal,
-    #[serde(rename = "Multipart")]
-    Multipart,
-    #[serde(rename = "Appendable")]
-    Appendable,
-}
+// Re-export the canonical ObjectType from `ops::common` for backwards
+// compatibility within the bucket module.
+pub use crate::ops::common::ObjectType;
 
 /// Summary information of a bucket
 #[derive(Debug, Clone, Default, Deserialize)]

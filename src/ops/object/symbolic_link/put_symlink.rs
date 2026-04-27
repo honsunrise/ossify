@@ -3,9 +3,9 @@ use std::future::Future;
 use http::{HeaderMap, HeaderName, Method};
 use serde::{Deserialize, Serialize};
 
-use super::super::base::StorageClass;
 use crate::body::ZeroBody;
 use crate::error::Result;
+use crate::ops::common::StorageClass;
 use crate::response::HeaderResponseProcessor;
 use crate::ser::OnlyKeyField;
 use crate::utils::escape_path;

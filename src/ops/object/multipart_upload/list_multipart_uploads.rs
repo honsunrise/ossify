@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::body::NoneBody;
 use crate::error::Result;
+use crate::ops::Owner;
 use crate::response::BodyResponseProcessor;
 use crate::ser::OnlyKeyField;
 use crate::{Client, Ops, Prepared, Request};
@@ -72,15 +73,6 @@ impl ListMultipartUploadsParams {
         self.encoding_type = Some(encoding_type.into());
         self
     }
-}
-
-/// Owner information of multipart upload event
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct Owner {
-    #[serde(rename = "ID")]
-    pub id: String,
-    pub display_name: String,
 }
 
 /// Multipart upload event information

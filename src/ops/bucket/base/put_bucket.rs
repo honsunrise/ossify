@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::body::XMLBody;
 use crate::error::Result;
+use crate::ops::common::{DataRedundancyType, StorageClass};
 use crate::response::EmptyResponseProcessor;
 use crate::{Client, Ops, Prepared, Request, ser};
 
@@ -37,59 +38,12 @@ impl AsRef<str> for BucketAcl {
     }
 }
 
-/// Storage class types
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum StorageClass {
-    #[default]
-    #[serde(rename = "Standard")]
-    Standard,
-    #[serde(rename = "IA")]
-    InfrequentAccess,
-    #[serde(rename = "Archive")]
-    Archive,
-    #[serde(rename = "ColdArchive")]
-    ColdArchive,
-    #[serde(rename = "DeepColdArchive")]
-    DeepColdArchive,
-}
-
-impl StorageClass {
-    pub fn as_str(&self) -> &str {
-        match self {
-            StorageClass::Standard => "Standard",
-            StorageClass::InfrequentAccess => "IA",
-            StorageClass::Archive => "Archive",
-            StorageClass::ColdArchive => "ColdArchive",
-            StorageClass::DeepColdArchive => "DeepColdArchive",
-        }
-    }
-}
-
-/// Data redundancy type
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum DataRedundancyType {
-    #[default]
-    #[serde(rename = "LRS")]
-    LocallyRedundantStorage,
-    #[serde(rename = "ZRS")]
-    ZoneRedundantStorage,
-}
-
-impl DataRedundancyType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            DataRedundancyType::LocallyRedundantStorage => "LRS",
-            DataRedundancyType::ZoneRedundantStorage => "ZRS",
-        }
-    }
-}
-
 /// Configuration for creating a bucket
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PutBucketConfiguration {
-    pub storage_class: Option<String>,
-    pub data_redundancy_type: Option<String>,
+    pub storage_class: Option<StorageClass>,
+    pub data_redundancy_type: Option<DataRedundancyType>,
 }
 
 /// Options for creating a bucket

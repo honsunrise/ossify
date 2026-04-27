@@ -8,78 +8,10 @@ use serde_with::skip_serializing_none;
 
 use crate::body::ZeroBody;
 use crate::error::Result;
+use crate::ops::common::{EncodingType, ServerSideEncryption, StorageClass};
 use crate::response::BodyResponseProcessor;
 use crate::ser::OnlyKeyField;
 use crate::{Client, Ops, Prepared, Request};
-
-/// Storage class
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum StorageClass {
-    #[serde(rename = "Standard")]
-    Standard,
-    #[serde(rename = "IA")]
-    InfrequentAccess,
-    #[serde(rename = "Archive")]
-    Archive,
-    #[serde(rename = "ColdArchive")]
-    ColdArchive,
-    #[serde(rename = "DeepColdArchive")]
-    DeepColdArchive,
-}
-
-impl Default for StorageClass {
-    fn default() -> Self {
-        Self::Standard
-    }
-}
-
-impl AsRef<str> for StorageClass {
-    fn as_ref(&self) -> &str {
-        match self {
-            StorageClass::Standard => "Standard",
-            StorageClass::InfrequentAccess => "IA",
-            StorageClass::Archive => "Archive",
-            StorageClass::ColdArchive => "ColdArchive",
-            StorageClass::DeepColdArchive => "DeepColdArchive",
-        }
-    }
-}
-
-/// Server-side encryption method
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum ServerSideEncryption {
-    #[serde(rename = "AES256")]
-    Aes256,
-    #[serde(rename = "KMS")]
-    Kms,
-    #[serde(rename = "SM4")]
-    Sm4,
-}
-
-impl AsRef<str> for ServerSideEncryption {
-    fn as_ref(&self) -> &str {
-        match self {
-            ServerSideEncryption::Aes256 => "AES256",
-            ServerSideEncryption::Kms => "KMS",
-            ServerSideEncryption::Sm4 => "SM4",
-        }
-    }
-}
-
-/// Encoding type
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum EncodingType {
-    #[serde(rename = "url")]
-    Url,
-}
-
-impl AsRef<str> for EncodingType {
-    fn as_ref(&self) -> &str {
-        match self {
-            EncodingType::Url => "url",
-        }
-    }
-}
 
 /// InitiateMultipartUpload request parameters
 #[skip_serializing_none]

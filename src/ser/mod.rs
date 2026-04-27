@@ -98,10 +98,12 @@ where
 
 pub struct SeqSerializer<'a, W: io::Write> {
     writer: &'a mut W,
+    first: bool,
 }
 
 pub struct TupleSerializer<'a, W: io::Write> {
     writer: &'a mut W,
+    first: bool,
 }
 
 pub struct MapSerializer<'a, W: io::Write> {
@@ -240,12 +242,14 @@ where
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
         Ok(SeqSerializer {
             writer: &mut self.writer,
+            first: true,
         })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
         Ok(TupleSerializer {
             writer: &mut self.writer,
+            first: true,
         })
     }
 
@@ -296,7 +300,19 @@ where
     type Error = Error;
 
     fn serialize_element<T: ?Sized + ser::Serialize>(&mut self, value: &T) -> Result<()> {
-        value.serialize(pair::PairSerializer::new(self.writer))
+        // Serialize the pair into a scratch buffer so we can skip empty
+        // entries (value == None / unit) without emitting a stray
+        // separator, and prefix `&` only between non-empty pairs.
+        let mut scratch = Vec::with_capacity(128);
+        value.serialize(pair::PairSerializer::new(&mut scratch))?;
+        if scratch.is_empty() {
+            return Ok(());
+        }
+        if !mem::replace(&mut self.first, false) {
+            self.writer.write_all(b"&")?;
+        }
+        self.writer.write_all(&scratch)?;
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok> {
@@ -312,7 +328,16 @@ where
     type Error = Error;
 
     fn serialize_element<T: ?Sized + ser::Serialize>(&mut self, value: &T) -> Result<()> {
-        value.serialize(pair::PairSerializer::new(self.writer))
+        let mut scratch = Vec::with_capacity(128);
+        value.serialize(pair::PairSerializer::new(&mut scratch))?;
+        if scratch.is_empty() {
+            return Ok(());
+        }
+        if !mem::replace(&mut self.first, false) {
+            self.writer.write_all(b"&")?;
+        }
+        self.writer.write_all(&scratch)?;
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok> {

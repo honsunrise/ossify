@@ -1,5 +1,5 @@
 mod get_symlink;
-mod pub_symlink;
+mod put_symlink;
 
 pub use get_symlink::*;
-pub use pub_symlink::*;
+pub use put_symlink::*;

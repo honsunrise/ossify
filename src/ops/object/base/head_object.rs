@@ -5,36 +5,11 @@ use http::{HeaderMap, Method, header};
 use jiff::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::StorageClass;
 use crate::body::NoneBody;
 use crate::error::Result;
+use crate::ops::common::{ObjectType, ServerSideEncryption, StorageClass};
 use crate::response::HeaderResponseProcessor;
 use crate::{Client, Ops, Prepared, Request};
-
-/// OSS object type
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all_fields = "lowercase")]
-pub enum ObjectType {
-    /// Object uploaded via PutObject
-    Normal,
-    /// Object uploaded via AppendObject
-    Appendable,
-    /// Object uploaded via MultipartUpload
-    Multipart,
-}
-
-/// Server-side encryption type
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all_fields = "lowercase")]
-pub enum ServerSideEncryption {
-    /// AES256 encryption
-    AES256,
-    /// KMS encryption
-    KMS,
-    /// SM4 encryption
-    SM4,
-}
 
 /// Restore status information
 #[derive(Debug, Clone, Deserialize)]

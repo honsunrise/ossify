@@ -209,15 +209,21 @@ where
                 Ok(())
             },
             PairState::WaitingForValue { key } => {
-                let result = {
-                    let mut value_serializer = flatten::FlattenSerializer::new(self.writer);
-                    value.serialize(&mut value_serializer)
-                };
-                // recover the state if the value serialization fails
-                if result.is_err() {
-                    self.state = PairState::WaitingForValue { key };
-                    return result;
+                // Serialize the value into an in-memory buffer first so we
+                // can decide whether to emit the pair at all (an empty buf
+                // means the value was `None` / unit and the whole entry
+                // is skipped).
+                let mut value_buf = Vec::with_capacity(128);
+                {
+                    let mut value_serializer = flatten::FlattenSerializer::new(&mut value_buf);
+                    value.serialize(&mut value_serializer)?;
                 }
+                if !value_buf.is_empty() {
+                    self.writer.write_all(key.as_bytes())?;
+                    self.writer.write_all(b"=")?;
+                    self.writer.write_all(&value_buf)?;
+                }
+                // state already advanced to Done above.
                 Ok(())
             },
             PairState::Done => Err(Error::done()),
