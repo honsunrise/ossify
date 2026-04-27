@@ -2,41 +2,13 @@ use std::collections::HashMap;
 use std::future::Future;
 
 use http::{HeaderMap, HeaderName, Method};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::body::XMLBody;
 use crate::error::Result;
-use crate::ops::common::{DataRedundancyType, StorageClass};
+use crate::ops::common::{BucketAcl, DataRedundancyType, StorageClass};
 use crate::response::EmptyResponseProcessor;
 use crate::{Client, Ops, Prepared, Request, ser};
-
-/// Represents the access control list (ACL) for a bucket in Aliyun OSS.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum BucketAcl {
-    #[serde(rename = "public-read-write")]
-    PublicReadWrite,
-    #[serde(rename = "public-read")]
-    PublicRead,
-    #[default]
-    #[serde(rename = "private")]
-    Private,
-}
-
-impl BucketAcl {
-    pub fn as_str(&self) -> &str {
-        match self {
-            BucketAcl::PublicReadWrite => "public-read-write",
-            BucketAcl::PublicRead => "public-read",
-            BucketAcl::Private => "private",
-        }
-    }
-}
-
-impl AsRef<str> for BucketAcl {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
 
 /// Configuration for creating a bucket
 #[derive(Debug, Clone, Default, Serialize)]

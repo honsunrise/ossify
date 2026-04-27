@@ -6,6 +6,7 @@
 //! between duplicate definitions and makes them easy to reuse in future
 //! operations.
 
+mod acl;
 mod encoding_type;
 mod encryption;
 mod object_type;
@@ -13,6 +14,7 @@ mod owner;
 mod redundancy_transition;
 mod storage_class;
 
+pub use acl::BucketAcl;
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
 pub use object_type::ObjectType;
