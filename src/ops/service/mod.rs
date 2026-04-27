@@ -1,15 +1,21 @@
 mod describe_regions;
+mod delete_public_access_block;
+mod get_public_access_block;
 mod get_user_anti_ddos_info;
 mod init_user_anti_ddos_info;
 mod list_buckets;
 mod list_user_data_redundancy_transition;
+mod put_public_access_block;
 mod update_user_anti_ddos_info;
 
 pub use describe_regions::*;
+pub use delete_public_access_block::*;
+pub use get_public_access_block::*;
 pub use get_user_anti_ddos_info::*;
 pub use init_user_anti_ddos_info::*;
 pub use list_buckets::*;
 pub use list_user_data_redundancy_transition::*;
+pub use put_public_access_block::*;
 pub use update_user_anti_ddos_info::*;
 
 // Aggregated operations trait (blanket-implemented for any type that
@@ -21,6 +27,9 @@ pub trait ServiceOperations:
     + InitUserAntiDDosInfoOps
     + UpdateUserAntiDDosInfoOps
     + GetUserAntiDDosInfoOps
+    + PutPublicAccessBlockOps
+    + GetPublicAccessBlockOps
+    + DeletePublicAccessBlockOps
 {
 }
 
@@ -31,5 +40,8 @@ impl<T> ServiceOperations for T where
         + InitUserAntiDDosInfoOps
         + UpdateUserAntiDDosInfoOps
         + GetUserAntiDDosInfoOps
+        + PutPublicAccessBlockOps
+        + GetPublicAccessBlockOps
+        + DeletePublicAccessBlockOps
 {
 }
