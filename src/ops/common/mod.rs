@@ -6,6 +6,7 @@
 //! between duplicate definitions and makes them easy to reuse in future
 //! operations.
 
+mod access_point;
 mod acl;
 mod anti_ddos;
 mod encoding_type;
@@ -19,6 +20,7 @@ mod replication;
 mod storage_class;
 mod tag;
 
+pub use access_point::{AccessPointNetworkOrigin, AccessPointStatus, VpcConfiguration};
 pub use acl::BucketAcl;
 pub use anti_ddos::{
     AntiDdosCnames, AntiDdosConfiguration, AntiDdosListConfiguration, AntiDdosStatus, AntiDdosType,

@@ -1,4 +1,5 @@
 pub mod access_monitor;
+pub mod access_point;
 pub mod acl;
 pub mod anti_ddos;
 pub mod archive_direct_read;
@@ -27,6 +28,7 @@ pub mod website;
 // Re-export everything so callers can `use ossify::ops::bucket::*` and get
 // every bucket-level type and trait.
 pub use access_monitor::*;
+pub use access_point::*;
 pub use acl::*;
 pub use anti_ddos::*;
 pub use archive_direct_read::*;
