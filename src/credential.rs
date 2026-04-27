@@ -9,18 +9,12 @@ use jiff::Timestamp;
 use jiff::fmt::rfc2822;
 use serde::Serialize;
 
+use crate::credentials::Credentials;
 use crate::utils::escape_path;
 use crate::{QueryAuthOptions, ser};
 
 const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
 const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
-
-#[derive(Clone, Debug)]
-pub(crate) struct Credential {
-    pub access_key_id: String,
-    pub access_key_secret: String,
-    pub security_token: Option<String>,
-}
 
 pub(crate) struct SignContext<'a, Q>
 where
@@ -44,138 +38,139 @@ where
     x_oss_date: Cow<'a, str>,
     x_oss_signature_version: Cow<'a, str>,
     x_oss_credential: Cow<'a, str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    x_oss_security_token: Option<Cow<'a, str>>,
     #[serde(flatten)]
     query: Option<Q>,
     #[serde(flatten)]
     query_auth_options: QueryAuthOptions,
 }
 
-impl Credential {
-    pub(crate) fn auth_to<Q>(
-        &self,
-        request: &mut reqwest::Request,
-        SignContext {
-            region,
-            product,
-            bucket,
-            key,
-            additional_headers,
+pub(crate) fn auth_to<Q>(
+    credentials: &Credentials,
+    request: &mut reqwest::Request,
+    SignContext {
+        region,
+        product,
+        bucket,
+        key,
+        additional_headers,
+        query,
+    }: SignContext<'_, Q>,
+    query_auth_options: Option<QueryAuthOptions>,
+) -> Result<()>
+where
+    Q: Serialize,
+{
+    static RFC2822_PRINTER: rfc2822::DateTimePrinter = rfc2822::DateTimePrinter::new();
+
+    let is_query_auth = query_auth_options.is_some();
+
+    // Prepare x-sdk-client
+    let version = env!("CARGO_PKG_VERSION");
+    let x_sdk_client = format!("ossify/{version}");
+
+    // Prepare x-oss-date and date
+    let datetime = Timestamp::now();
+    let datetime_iso8601_str = datetime.strftime("%Y%m%dT%H%M%SZ").to_string();
+    let datetime_rfc2822_str = RFC2822_PRINTER.timestamp_to_string(&datetime)?;
+
+    // Prepare scope
+    let date_iso8601_str = &datetime_iso8601_str[..8];
+    let scope = build_scope(date_iso8601_str, &region, &product);
+
+    // Canonical sign path
+    let sign_path = build_sign_path(bucket.as_deref(), key.as_deref());
+    let canonical_sign_path = escape_path(&sign_path);
+
+    // Canonical query
+    let mut canonical_query: Cow<'_, str> = Cow::Borrowed("");
+    if let Some(query_auth_options) = query_auth_options {
+        let with_credential = WithCredentialQuery {
+            x_oss_credential: Cow::Owned(format!("{}/{scope}", credentials.access_key_id)),
+            x_oss_client: Cow::Borrowed(&x_sdk_client),
+            x_oss_date: Cow::Borrowed(&datetime_iso8601_str),
+            x_oss_signature_version: Cow::Borrowed(SIGNATURE_VERSION),
+            x_oss_security_token: credentials.security_token.as_deref().map(Cow::Borrowed),
+            query_auth_options,
             query,
-        }: SignContext<'_, Q>,
-        query_auth_options: Option<QueryAuthOptions>,
-    ) -> Result<()>
-    where
-        Q: Serialize,
-    {
-        static RFC2822_PRINTER: rfc2822::DateTimePrinter = rfc2822::DateTimePrinter::new();
-
-        let is_query_auth = query_auth_options.is_some();
-
-        // Prepare x-sdk-client
-        let version = env!("CARGO_PKG_VERSION");
-        let x_sdk_client = format!("ossify/{version}");
-
-        // Prepare x-oss-date and date
-        let datetime = Timestamp::now();
-        let datetime_iso8601_str = datetime.strftime("%Y%m%dT%H%M%SZ").to_string();
-        let datetime_rfc2822_str = RFC2822_PRINTER.timestamp_to_string(&datetime)?;
-
-        // Prepare scope
-        let date_iso8601_str = &datetime_iso8601_str[..8];
-        let scope = build_scope(date_iso8601_str, &region, &product);
-
-        // Canonical sign path
-        let sign_path = build_sign_path(bucket.as_deref(), key.as_deref());
-        let canonical_sign_path = escape_path(&sign_path);
-
-        // Canonical query
-        let mut canonical_query: Cow<'_, str> = Cow::Borrowed("");
-        if let Some(query_auth_options) = query_auth_options {
-            let with_credential = WithCredentialQuery {
-                x_oss_credential: Cow::Owned(format!("{}/{scope}", self.access_key_id)),
-                x_oss_client: Cow::Borrowed(&x_sdk_client),
-                x_oss_date: Cow::Borrowed(&datetime_iso8601_str),
-                x_oss_signature_version: Cow::Borrowed(SIGNATURE_VERSION),
-                query_auth_options,
-                query,
-            };
-            canonical_query = Cow::Owned(ser::to_string(&with_credential)?)
-        } else if let Some(query) = query {
-            canonical_query = Cow::Owned(ser::to_string(&query)?)
-        }
-
-        // Append headers
-        let mut canonical_headers_str = Cow::Borrowed("");
-        let mut canonical_additional_headers_str = Cow::Borrowed("");
-        if !is_query_auth {
-            let x_oss_content_sha256 = HeaderValue::from_static(UNSIGNED_PAYLOAD);
-            let x_sdk_client = HeaderValue::from_str(&x_sdk_client).context("parse x-sdk-client")?;
-            let x_oss_date = HeaderValue::from_str(&datetime_iso8601_str).expect("invalid x-oss-date");
-            let date_rfc2822 = HeaderValue::from_str(&datetime_rfc2822_str).expect("invalid date");
-
-            let headers = request.headers_mut();
-            headers.append("x-sdk-client", x_sdk_client);
-            headers.append("x-oss-date", x_oss_date);
-            headers.append(DATE, date_rfc2822);
-            headers.append("x-oss-content-sha256", x_oss_content_sha256);
-
-            // Append security token header if present
-            if let Some(token) = &self.security_token {
-                headers.insert("x-oss-security-token", HeaderValue::from_str(token)?);
-            }
-
-            // Canonical headers
-            canonical_headers_str = Cow::Owned(canonical_headers(headers, &additional_headers)?);
-            canonical_additional_headers_str = Cow::Owned(
-                additional_headers
-                    .iter()
-                    .map(|h| h.to_lowercase())
-                    .collect::<Vec<_>>()
-                    .join(";"),
-            );
         };
-
-        // Prepare Authorization
-        let method = request.method();
-        let canonical_request = format!(
-            "{}\n{canonical_sign_path}\n{canonical_query}\n{canonical_headers_str}\n{canonical_additional_headers_str}\n{UNSIGNED_PAYLOAD}",
-            method.as_str(),
-        );
-
-        // Prepare string to sign
-        let string_to_sign = format!(
-            "{SIGNATURE_VERSION}\n{datetime_iso8601_str}\n{scope}\n{}",
-            sha256_hex(&canonical_request)
-        );
-
-        let signature = hex::encode(calculate_signature(
-            &self.access_key_secret,
-            date_iso8601_str,
-            &region,
-            &product,
-            &string_to_sign,
-        )?);
-
-        if is_query_auth {
-            canonical_query = Cow::Owned(format!("{canonical_query}&x-oss-signature={signature}"));
-        } else {
-            let mut credential_header =
-                format!("{SIGNATURE_VERSION} Credential={}/{scope}", self.access_key_id);
-            if !canonical_additional_headers_str.is_empty() {
-                write!(&mut credential_header, ",AdditionalHeaders={canonical_additional_headers_str}")?;
-            }
-            write!(&mut credential_header, ",Signature={signature}")?;
-            let authorization = HeaderValue::from_str(&credential_header).expect("invalid Authorization");
-            let headers = request.headers_mut();
-            headers.append(AUTHORIZATION, authorization);
-        }
-
-        if !canonical_query.is_empty() {
-            request.url_mut().set_query(Some(&canonical_query));
-        }
-
-        Ok(())
+        canonical_query = Cow::Owned(ser::to_string(&with_credential)?)
+    } else if let Some(query) = query {
+        canonical_query = Cow::Owned(ser::to_string(&query)?)
     }
+
+    // Append headers
+    let mut canonical_headers_str = Cow::Borrowed("");
+    let mut canonical_additional_headers_str = Cow::Borrowed("");
+    if !is_query_auth {
+        let x_oss_content_sha256 = HeaderValue::from_static(UNSIGNED_PAYLOAD);
+        let x_sdk_client = HeaderValue::from_str(&x_sdk_client).context("parse x-sdk-client")?;
+        let x_oss_date = HeaderValue::from_str(&datetime_iso8601_str).expect("invalid x-oss-date");
+        let date_rfc2822 = HeaderValue::from_str(&datetime_rfc2822_str).expect("invalid date");
+
+        let headers = request.headers_mut();
+        headers.append("x-sdk-client", x_sdk_client);
+        headers.append("x-oss-date", x_oss_date);
+        headers.append(DATE, date_rfc2822);
+        headers.append("x-oss-content-sha256", x_oss_content_sha256);
+
+        // Append security token header if present
+        if let Some(token) = &credentials.security_token {
+            headers.insert("x-oss-security-token", HeaderValue::from_str(token)?);
+        }
+
+        // Canonical headers
+        canonical_headers_str = Cow::Owned(canonical_headers(headers, &additional_headers)?);
+        canonical_additional_headers_str = Cow::Owned(
+            additional_headers
+                .iter()
+                .map(|h| h.to_lowercase())
+                .collect::<Vec<_>>()
+                .join(";"),
+        );
+    };
+
+    // Prepare Authorization
+    let method = request.method();
+    let canonical_request = format!(
+        "{}\n{canonical_sign_path}\n{canonical_query}\n{canonical_headers_str}\n{canonical_additional_headers_str}\n{UNSIGNED_PAYLOAD}",
+        method.as_str(),
+    );
+
+    // Prepare string to sign
+    let string_to_sign = format!(
+        "{SIGNATURE_VERSION}\n{datetime_iso8601_str}\n{scope}\n{}",
+        sha256_hex(&canonical_request)
+    );
+
+    let signature = hex::encode(calculate_signature(
+        &credentials.access_key_secret,
+        date_iso8601_str,
+        &region,
+        &product,
+        &string_to_sign,
+    )?);
+
+    if is_query_auth {
+        canonical_query = Cow::Owned(format!("{canonical_query}&x-oss-signature={signature}"));
+    } else {
+        let mut credential_header =
+            format!("{SIGNATURE_VERSION} Credential={}/{scope}", credentials.access_key_id);
+        if !canonical_additional_headers_str.is_empty() {
+            write!(&mut credential_header, ",AdditionalHeaders={canonical_additional_headers_str}")?;
+        }
+        write!(&mut credential_header, ",Signature={signature}")?;
+        let authorization = HeaderValue::from_str(&credential_header).expect("invalid Authorization");
+        let headers = request.headers_mut();
+        headers.append(AUTHORIZATION, authorization);
+    }
+
+    if !canonical_query.is_empty() {
+        request.url_mut().set_query(Some(&canonical_query));
+    }
+
+    Ok(())
 }
 
 #[inline]
@@ -441,10 +436,11 @@ mod tests {
 
     #[test]
     fn test_auth_to_adds_authorization_header() {
-        let credential = Credential {
+        let credentials = Credentials {
             access_key_id: "test-ak-id".to_string(),
             access_key_secret: "test-ak-secret".to_string(),
             security_token: None,
+            expiration: None,
         };
 
         let mut request = build_test_request("https://example.oss-cn-hangzhou.aliyuncs.com/");
@@ -458,7 +454,7 @@ mod tests {
             additional_headers: HashSet::new(),
         };
 
-        credential.auth_to(&mut request, sign_context, None).unwrap();
+        auth_to(&credentials, &mut request, sign_context, None).unwrap();
 
         let headers = request.headers();
         assert!(headers.contains_key(AUTHORIZATION));
@@ -474,10 +470,11 @@ mod tests {
 
     #[test]
     fn test_auth_to_with_security_token() {
-        let credential = Credential {
+        let credentials = Credentials {
             access_key_id: "test-ak-id".to_string(),
             access_key_secret: "test-ak-secret".to_string(),
             security_token: Some("test-security-token".to_string()),
+            expiration: None,
         };
 
         let mut request = build_test_request("https://example.oss-cn-hangzhou.aliyuncs.com/");
@@ -491,7 +488,7 @@ mod tests {
             additional_headers: HashSet::new(),
         };
 
-        credential.auth_to(&mut request, sign_context, None).unwrap();
+        auth_to(&credentials, &mut request, sign_context, None).unwrap();
 
         let headers = request.headers();
         assert_eq!(
@@ -502,10 +499,11 @@ mod tests {
 
     #[test]
     fn test_auth_to_query_auth_sets_query_string() {
-        let credential = Credential {
+        let credentials = Credentials {
             access_key_id: "test-ak-id".to_string(),
             access_key_secret: "test-ak-secret".to_string(),
             security_token: None,
+            expiration: None,
         };
 
         let mut request = build_test_request("https://example.oss-cn-hangzhou.aliyuncs.com/");
@@ -520,9 +518,7 @@ mod tests {
         };
 
         let query_auth_options = QueryAuthOptions::builder().x_oss_expires(3600).build();
-        credential
-            .auth_to(&mut request, sign_context, Some(query_auth_options))
-            .unwrap();
+        auth_to(&credentials, &mut request, sign_context, Some(query_auth_options)).unwrap();
 
         // In query auth mode, no Authorization header should be set
         assert!(!request.headers().contains_key(AUTHORIZATION));
@@ -531,5 +527,44 @@ mod tests {
         assert!(query.contains("x-oss-signature="));
         assert!(query.contains("x-oss-credential="));
         assert!(query.contains("x-oss-signature-version=OSS4-HMAC-SHA256"));
+        // No STS token was provided so it must not appear in the query string
+        assert!(!query.contains("x-oss-security-token"));
+    }
+
+    #[test]
+    fn test_auth_to_query_auth_with_security_token() {
+        // When STS credentials are used, the security token must appear in
+        // the presigned URL query string so the server can look up the
+        // temporary key pair.
+        let credentials = Credentials {
+            access_key_id: "STS.test-sts-ak".to_string(),
+            access_key_secret: "test-sts-secret".to_string(),
+            security_token: Some("test-security-token".to_string()),
+            expiration: None,
+        };
+
+        let mut request = build_test_request("https://example.oss-cn-hangzhou.aliyuncs.com/");
+
+        let sign_context: SignContext<'_, ()> = SignContext {
+            region: Cow::Borrowed("cn-hangzhou"),
+            product: Cow::Borrowed("oss"),
+            bucket: Some(Cow::Borrowed("test-bucket")),
+            key: Some(Cow::Borrowed("test-key")),
+            query: None,
+            additional_headers: HashSet::new(),
+        };
+
+        let query_auth_options = QueryAuthOptions::builder().x_oss_expires(3600).build();
+        auth_to(&credentials, &mut request, sign_context, Some(query_auth_options)).unwrap();
+
+        let query = request.url().query().unwrap();
+        // STS token must be present in the query string
+        assert!(
+            query.contains("x-oss-security-token=test-security-token"),
+            "query missing x-oss-security-token: {query}"
+        );
+        // Signature fields must still be present
+        assert!(query.contains("x-oss-signature="));
+        assert!(query.contains("x-oss-credential=STS.test-sts-ak"));
     }
 }

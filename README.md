@@ -176,6 +176,67 @@ let client = Client::builder()
     .build()?;
 ```
 
+#### RRSA (RAM Roles for Service Accounts)
+
+When running inside ACK (Alibaba Cloud Container Service for Kubernetes),
+pods configured with a service-account-bound RAM role get the following
+environment variables injected automatically:
+
+- `ALIBABA_CLOUD_ROLE_ARN`
+- `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`
+- `ALIBABA_CLOUD_OIDC_TOKEN_FILE`
+
+Use `RrsaCredentialsProvider` to exchange the OIDC token for temporary STS
+credentials. Tokens are cached and refreshed automatically before they
+expire.
+
+```rust
+use ossify::Client;
+use ossify::credentials::RrsaCredentialsProvider;
+
+// Option 1: read configuration from the environment (the typical ACK case).
+let http_client = reqwest::Client::new();
+let rrsa = RrsaCredentialsProvider::from_env(http_client)
+    .expect("RRSA env vars are set");
+
+let client = Client::builder()
+    .endpoint("https://oss-cn-hangzhou-internal.aliyuncs.com")
+    .region("cn-hangzhou")
+    .bucket("my-bucket")
+    .credentials_provider(rrsa)
+    .build()?;
+
+// Option 2: configure RRSA explicitly.
+let rrsa = RrsaCredentialsProvider::builder()
+    .role_arn("acs:ram::123456789012:role/my-role")
+    .oidc_provider_arn("acs:ram::123456789012:oidc-provider/my-provider")
+    .oidc_token_file_path("/var/run/secrets/tokens/oidc-token")
+    .role_session_name("my-app")        // optional
+    .session_duration_seconds(3600)     // optional, default 3600
+    .build()?;
+```
+
+#### Default credentials chain (zero-config)
+
+If neither explicit AK/SK nor an explicit `credentials_provider` is passed to
+`ClientBuilder`, the SDK falls back to `DefaultCredentialsChain`, which walks:
+
+1. `EnvironmentCredentialsProvider` – `ALIBABA_CLOUD_ACCESS_KEY_ID` /
+   `ALIBABA_CLOUD_ACCESS_KEY_SECRET` (+ optional
+   `ALIBABA_CLOUD_SECURITY_TOKEN`) or the `OSS_*` equivalents.
+2. `RrsaCredentialsProvider::from_env` – RRSA/OIDC, if the appropriate
+   environment variables are set.
+
+```rust
+// No credentials passed explicitly – the client reads them from the
+// environment / RRSA automatically.
+let client = Client::builder()
+    .endpoint("https://oss-cn-hangzhou.aliyuncs.com")
+    .region("cn-hangzhou")
+    .bucket("my-bucket")
+    .build()?;
+```
+
 ## 🌟 Advanced Features
 
 ### Presigned URLs

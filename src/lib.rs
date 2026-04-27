@@ -1,5 +1,6 @@
 pub mod body;
 mod credential;
+pub mod credentials;
 mod error;
 pub mod ops;
 mod query_auth_option;
@@ -18,7 +19,13 @@ use tracing::trace;
 use url::Url;
 
 pub use self::body::MakeBody;
-use self::credential::{Credential, SignContext};
+use self::credential::SignContext;
+use self::credentials::{
+    CredentialsProvider,
+    DefaultCredentialsChain,
+    DynCredentialsProvider,
+    StaticCredentialsProvider,
+};
 pub use self::error::{Error, Result};
 pub use self::query_auth_option::{QueryAuthOptions, QueryAuthOptionsBuilder};
 pub use self::response::ResponseProcessor;
@@ -124,7 +131,7 @@ pub struct Client {
     bucket: String,
     url_style: UrlStyle,
     public_url_style: UrlStyle,
-    credentials: Credential,
+    credentials_provider: DynCredentialsProvider,
 }
 
 impl Client {
@@ -179,7 +186,7 @@ impl Client {
         (host, path)
     }
 
-    fn prepare_request<P>(
+    async fn prepare_request<P>(
         &self,
         ops: P,
         public: bool,
@@ -241,9 +248,11 @@ impl Client {
             additional_headers,
         };
 
+        // Resolve credentials (may trigger STS call / file reads)
+        let credentials = self.credentials_provider.get_credentials().await?;
+
         // Authenticate the request
-        self.credentials
-            .auth_to(&mut request, sign_context, query_auth_options)?;
+        credential::auth_to(&credentials, &mut request, sign_context, query_auth_options)?;
 
         Ok(request)
     }
@@ -259,7 +268,7 @@ where
     type Response = <P::Response as ResponseProcessor>::Output;
 
     async fn request(&self, ops: P) -> Result<Self::Response> {
-        let request = self.prepare_request(ops, false, None)?;
+        let request = self.prepare_request(ops, false, None).await?;
 
         // Send the request
         trace!("Sending request: {request:?}");
@@ -275,7 +284,7 @@ where
         public: bool,
         query_auth_options: Option<QueryAuthOptions>,
     ) -> Result<String> {
-        let request = self.prepare_request(ops, public, query_auth_options)?;
+        let request = self.prepare_request(ops, public, query_auth_options).await?;
 
         let sign_url = request.url().to_string();
         Ok(sign_url)
@@ -291,6 +300,7 @@ pub struct ClientBuilder {
     access_key_id: Option<String>,
     access_key_secret: Option<String>,
     security_token: Option<String>,
+    credentials_provider: Option<DynCredentialsProvider>,
 }
 
 impl ClientBuilder {
@@ -304,6 +314,7 @@ impl ClientBuilder {
             access_key_id: None,
             access_key_secret: None,
             security_token: None,
+            credentials_provider: None,
         }
     }
 
@@ -331,21 +342,44 @@ impl ClientBuilder {
         self
     }
 
-    /// Set the access key ID for authentication
+    /// Set the access key ID for authentication.
+    ///
+    /// When combined with [`Self::access_key_secret`] (and optionally
+    /// [`Self::security_token`]) this installs a
+    /// [`StaticCredentialsProvider`]. For dynamic credentials (RRSA, ECS RAM
+    /// role, …) use [`Self::credentials_provider`] instead.
     pub fn access_key_id<T: AsRef<str>>(mut self, access_key_id: T) -> Self {
         self.access_key_id = Some(access_key_id.as_ref().to_string());
         self
     }
 
-    /// Set the access key secret for authentication
+    /// Set the access key secret for authentication. See
+    /// [`Self::access_key_id`].
     pub fn access_key_secret<T: AsRef<str>>(mut self, access_key_secret: T) -> Self {
         self.access_key_secret = Some(access_key_secret.as_ref().to_string());
         self
     }
 
-    /// Set the security token (optional, for temporary credentials)
+    /// Set the security token (optional, for temporary STS credentials
+    /// supplied out-of-band).
     pub fn security_token<T: AsRef<str>>(mut self, security_token: T) -> Self {
         self.security_token = Some(security_token.as_ref().to_string());
+        self
+    }
+
+    /// Use a custom [`CredentialsProvider`]. This takes precedence over
+    /// [`Self::access_key_id`] / [`Self::access_key_secret`] /
+    /// [`Self::security_token`].
+    ///
+    /// For RRSA (RAM Roles for Service Accounts) pass an instance of
+    /// [`credentials::RrsaCredentialsProvider`]; for a zero-config setup that
+    /// also reads credentials from environment variables use
+    /// [`credentials::DefaultCredentialsChain`].
+    pub fn credentials_provider<P>(mut self, provider: P) -> Self
+    where
+        P: CredentialsProvider + 'static,
+    {
+        self.credentials_provider = Some(DynCredentialsProvider::new(provider));
         self
     }
 
@@ -385,12 +419,6 @@ impl ClientBuilder {
         let bucket = self
             .bucket
             .ok_or_else(|| Error::InvalidArgument("bucket is required".to_string()))?;
-        let access_key_id = self
-            .access_key_id
-            .ok_or_else(|| Error::InvalidArgument("access_key_id is required".to_string()))?;
-        let access_key_secret = self
-            .access_key_secret
-            .ok_or_else(|| Error::InvalidArgument("access_key_secret is required".to_string()))?;
 
         // Build HTTP client
         let http_client = reqwest::Client::builder()
@@ -412,11 +440,26 @@ impl ClientBuilder {
             .to_owned();
         let raw_public_scheme = public_endpoint_url.scheme().to_owned();
 
-        // Build credentials
-        let credentials = Credential {
-            security_token: self.security_token,
-            access_key_id,
-            access_key_secret,
+        // Resolve credentials provider:
+        // 1. explicit provider wins
+        // 2. explicit AK/SK (+ optional token) falls back to a StaticCredentialsProvider
+        // 3. otherwise: DefaultCredentialsChain (env vars, RRSA, …)
+        let credentials_provider = if let Some(provider) = self.credentials_provider {
+            provider
+        } else {
+            match (self.access_key_id, self.access_key_secret) {
+                (Some(ak), Some(sk)) => {
+                    let provider = if let Some(token) = self.security_token {
+                        StaticCredentialsProvider::with_security_token(ak, sk, token)
+                    } else {
+                        StaticCredentialsProvider::new(ak, sk)
+                    };
+                    DynCredentialsProvider::new(provider)
+                },
+                _ => DynCredentialsProvider::new(DefaultCredentialsChain::with_http_client(
+                    http_client.clone(),
+                )),
+            }
         };
 
         Ok(Client {
@@ -428,7 +471,7 @@ impl ClientBuilder {
             raw_public_scheme,
             url_style: self.config.url_style,
             public_url_style: self.config.public_url_style,
-            credentials,
+            credentials_provider,
             http_client,
         })
     }
