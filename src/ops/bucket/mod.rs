@@ -1,7 +1,11 @@
+pub mod access_monitor;
 pub mod acl;
+pub mod archive_direct_read;
 pub mod base;
+pub mod cors;
 pub mod data_indexing;
 pub mod encryption;
+pub mod https_config;
 pub mod inventory;
 pub mod lifecycle;
 pub mod logging;
@@ -9,6 +13,7 @@ pub mod policy;
 pub mod referer;
 pub mod replication;
 pub mod request_payment;
+pub mod resource_group;
 pub mod retention;
 pub mod tagging;
 pub mod transfer_acceleration;
@@ -17,10 +22,14 @@ pub mod website;
 
 // Re-export everything so callers can `use ossify::ops::bucket::*` and get
 // every bucket-level type and trait.
+pub use access_monitor::*;
 pub use acl::*;
+pub use archive_direct_read::*;
 pub use base::*;
+pub use cors::*;
 pub use data_indexing::*;
 pub use encryption::*;
+pub use https_config::*;
 pub use inventory::*;
 pub use lifecycle::*;
 pub use logging::*;
@@ -28,6 +37,7 @@ pub use policy::*;
 pub use referer::*;
 pub use replication::*;
 pub use request_payment::*;
+pub use resource_group::*;
 pub use retention::*;
 pub use tagging::*;
 pub use transfer_acceleration::*;
