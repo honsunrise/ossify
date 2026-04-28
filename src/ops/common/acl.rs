@@ -37,22 +37,88 @@ impl AsRef<str> for BucketAcl {
     }
 }
 
+/// Object canned ACL. Used by `PutObjectACL`, `GetObjectACL`, and the
+/// `x-oss-object-acl` header on upload operations.
+///
+/// Unlike [`BucketAcl`] this includes a `Default` variant meaning "inherit
+/// from the bucket".
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ObjectAcl {
+    /// Inherits the bucket's ACL.
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    /// Anonymous users can read and write the object.
+    #[serde(rename = "public-read-write")]
+    PublicReadWrite,
+    /// Anonymous users can only read.
+    #[serde(rename = "public-read")]
+    PublicRead,
+    /// Only the owner / authorized users can read and write.
+    #[serde(rename = "private")]
+    Private,
+}
+
+impl ObjectAcl {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ObjectAcl::Default => "default",
+            ObjectAcl::PublicReadWrite => "public-read-write",
+            ObjectAcl::PublicRead => "public-read",
+            ObjectAcl::Private => "private",
+        }
+    }
+}
+
+impl AsRef<str> for ObjectAcl {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn bucket_acl_wire_names() {
-        assert_eq!(serde_json::to_string(&BucketAcl::PublicReadWrite).unwrap(), "\"public-read-write\"");
+        assert_eq!(
+            serde_json::to_string(&BucketAcl::PublicReadWrite).unwrap(),
+            "\"public-read-write\""
+        );
         assert_eq!(serde_json::to_string(&BucketAcl::PublicRead).unwrap(), "\"public-read\"");
         assert_eq!(serde_json::to_string(&BucketAcl::Private).unwrap(), "\"private\"");
     }
 
     #[test]
     fn bucket_acl_round_trip() {
-        for acl in [BucketAcl::PublicReadWrite, BucketAcl::PublicRead, BucketAcl::Private] {
+        for acl in [
+            BucketAcl::PublicReadWrite,
+            BucketAcl::PublicRead,
+            BucketAcl::Private,
+        ] {
             let json = serde_json::to_string(&acl).unwrap();
             let back: BucketAcl = serde_json::from_str(&json).unwrap();
+            assert_eq!(acl, back);
+        }
+    }
+
+    #[test]
+    fn object_acl_wire_names() {
+        assert_eq!(serde_json::to_string(&ObjectAcl::Default).unwrap(), "\"default\"");
+        assert_eq!(serde_json::to_string(&ObjectAcl::PublicRead).unwrap(), "\"public-read\"");
+    }
+
+    #[test]
+    fn object_acl_round_trip() {
+        for acl in [
+            ObjectAcl::Default,
+            ObjectAcl::PublicReadWrite,
+            ObjectAcl::PublicRead,
+            ObjectAcl::Private,
+        ] {
+            let s = serde_json::to_string(&acl).unwrap();
+            let back: ObjectAcl = serde_json::from_str(&s).unwrap();
             assert_eq!(acl, back);
         }
     }

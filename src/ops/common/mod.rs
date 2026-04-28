@@ -23,7 +23,7 @@ mod storage_class;
 mod tag;
 
 pub use access_point::{AccessPointNetworkOrigin, AccessPointStatus, VpcConfiguration};
-pub use acl::BucketAcl;
+pub use acl::{BucketAcl, ObjectAcl};
 pub use anti_ddos::{
     AntiDdosCnames, AntiDdosConfiguration, AntiDdosListConfiguration, AntiDdosStatus, AntiDdosType,
 };
