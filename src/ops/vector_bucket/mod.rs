@@ -14,18 +14,35 @@
 //! <https://www.alibabacloud.com/help/en/oss/developer-reference/apis-for-operations-on-vector-buckets/>
 
 pub mod bucket;
+pub mod index;
 
 pub use bucket::*;
+pub use index::*;
 
-/// Aggregate supertrait for vector-bucket lifecycle operations.
+/// Aggregate supertrait for vector-bucket operations.
 ///
-/// Batch 22a covers the four bucket-lifecycle APIs; index and vector
-/// operations will be added in subsequent sub-batches.
+/// Batches 22a–22b cover bucket-lifecycle and index operations; vector
+/// data-plane operations (Put/Get/List/Delete/Query vectors) will be added
+/// in batch 22c.
 pub trait VectorBucketOperations:
-    PutVectorBucketOps + GetVectorBucketOps + ListVectorBucketsOps + DeleteVectorBucketOps
+    PutVectorBucketOps
+    + GetVectorBucketOps
+    + ListVectorBucketsOps
+    + DeleteVectorBucketOps
+    + PutVectorIndexOps
+    + GetVectorIndexOps
+    + ListVectorIndexesOps
+    + DeleteVectorIndexOps
 {
 }
 impl<T> VectorBucketOperations for T where
-    T: PutVectorBucketOps + GetVectorBucketOps + ListVectorBucketsOps + DeleteVectorBucketOps
+    T: PutVectorBucketOps
+        + GetVectorBucketOps
+        + ListVectorBucketsOps
+        + DeleteVectorBucketOps
+        + PutVectorIndexOps
+        + GetVectorIndexOps
+        + ListVectorIndexesOps
+        + DeleteVectorIndexOps
 {
 }
