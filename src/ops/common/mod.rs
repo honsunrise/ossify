@@ -13,6 +13,7 @@ mod encoding_type;
 mod encryption;
 mod inventory;
 mod lifecycle;
+mod live_channel;
 mod object_fc_access_point;
 mod object_type;
 mod owner;
@@ -39,6 +40,11 @@ pub use lifecycle::{
     AbortIncompleteMultipartUpload, LifecycleConfiguration, LifecycleExpiration, LifecycleFilter,
     LifecycleFilterNot, LifecycleRule, LifecycleRuleStatus, LifecycleTransition,
     NoncurrentVersionExpiration, NoncurrentVersionTransition,
+};
+pub use live_channel::{
+    LiveChannelAudioStat, LiveChannelConfiguration, LiveChannelHistoryRecord,
+    LiveChannelSnapshot, LiveChannelStatus, LiveChannelSummary, LiveChannelTarget, LiveChannelUrls,
+    LiveChannelVideoStat,
 };
 pub use object_fc_access_point::{
     AccessPointForObjectProcessSummary, ObjectFcAccessPointStatus, ObjectFcActions,
