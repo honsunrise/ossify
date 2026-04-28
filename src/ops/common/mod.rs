@@ -24,35 +24,70 @@ mod replication;
 mod resource_pool;
 mod storage_class;
 mod tag;
+mod vector;
 
 pub use access_point::{AccessPointNetworkOrigin, AccessPointStatus, VpcConfiguration};
 pub use acl::{BucketAcl, ObjectAcl};
 pub use anti_ddos::{
-    AntiDdosCnames, AntiDdosConfiguration, AntiDdosListConfiguration, AntiDdosStatus, AntiDdosType,
+    AntiDdosCnames,
+    AntiDdosConfiguration,
+    AntiDdosListConfiguration,
+    AntiDdosStatus,
+    AntiDdosType,
 };
 pub use encoding_type::EncodingType;
 pub use encryption::ServerSideEncryption;
 pub use inventory::{
-    IncludedObjectVersions, IncrementalInventory, IncrementalInventorySchedule,
-    InventoryConfiguration, InventoryDestination, InventoryEncryption, InventoryFilter,
-    InventoryFormat, InventoryFrequency, InventoryOptionalField, InventorySchedule,
-    OptionalFields, OssBucketDestination, SseKmsInventoryEncryption, SseOssEncryption,
+    IncludedObjectVersions,
+    IncrementalInventory,
+    IncrementalInventorySchedule,
+    InventoryConfiguration,
+    InventoryDestination,
+    InventoryEncryption,
+    InventoryFilter,
+    InventoryFormat,
+    InventoryFrequency,
+    InventoryOptionalField,
+    InventorySchedule,
+    OptionalFields,
+    OssBucketDestination,
+    SseKmsInventoryEncryption,
+    SseOssEncryption,
 };
 pub use lifecycle::{
-    AbortIncompleteMultipartUpload, LifecycleConfiguration, LifecycleExpiration, LifecycleFilter,
-    LifecycleFilterNot, LifecycleRule, LifecycleRuleStatus, LifecycleTransition,
-    NoncurrentVersionExpiration, NoncurrentVersionTransition,
+    AbortIncompleteMultipartUpload,
+    LifecycleConfiguration,
+    LifecycleExpiration,
+    LifecycleFilter,
+    LifecycleFilterNot,
+    LifecycleRule,
+    LifecycleRuleStatus,
+    LifecycleTransition,
+    NoncurrentVersionExpiration,
+    NoncurrentVersionTransition,
 };
 pub use live_channel::{
-    LiveChannelAudioStat, LiveChannelConfiguration, LiveChannelHistoryRecord,
-    LiveChannelSnapshot, LiveChannelStatus, LiveChannelSummary, LiveChannelTarget, LiveChannelUrls,
+    LiveChannelAudioStat,
+    LiveChannelConfiguration,
+    LiveChannelHistoryRecord,
+    LiveChannelSnapshot,
+    LiveChannelStatus,
+    LiveChannelSummary,
+    LiveChannelTarget,
+    LiveChannelUrls,
     LiveChannelVideoStat,
 };
 pub use object_fc_access_point::{
-    AccessPointForObjectProcessSummary, ObjectFcAccessPointStatus, ObjectFcActions,
-    ObjectFcAllowedFeatures, ObjectFcContentTransformation, ObjectFcEndpoints,
-    ObjectFcFunctionCompute, ObjectFcTransformationConfiguration,
-    ObjectFcTransformationConfigurations, ObjectProcessConfiguration,
+    AccessPointForObjectProcessSummary,
+    ObjectFcAccessPointStatus,
+    ObjectFcActions,
+    ObjectFcAllowedFeatures,
+    ObjectFcContentTransformation,
+    ObjectFcEndpoints,
+    ObjectFcFunctionCompute,
+    ObjectFcTransformationConfiguration,
+    ObjectFcTransformationConfigurations,
+    ObjectProcessConfiguration,
 };
 pub use object_type::ObjectType;
 pub use owner::Owner;
@@ -60,16 +95,43 @@ pub use public_access_block::PublicAccessBlockConfiguration;
 pub use qos::{QoSConfiguration, RequesterQoSInfo};
 pub use redundancy_transition::RedundancyTransitionStatus;
 pub use replication::{
-    HistoricalObjectReplication, LocationTransferType, LocationTransferTypeConstraint, PrefixSet,
-    ReplicationAction, ReplicationConfiguration, ReplicationDestination,
-    ReplicationEncryptionConfiguration, ReplicationLocation, ReplicationProgressInfo,
-    ReplicationRule, ReplicationRuleStatus, Rtc, RtcStatus, SourceSelectionCriteria,
-    SseKmsEncryptedObjects, SseKmsStatus, TransferType, UserTagging, UserTaggingFilterType,
+    HistoricalObjectReplication,
+    LocationTransferType,
+    LocationTransferTypeConstraint,
+    PrefixSet,
+    ReplicationAction,
+    ReplicationConfiguration,
+    ReplicationDestination,
+    ReplicationEncryptionConfiguration,
+    ReplicationLocation,
+    ReplicationProgressInfo,
+    ReplicationRule,
+    ReplicationRuleStatus,
+    Rtc,
+    RtcStatus,
+    SourceSelectionCriteria,
+    SseKmsEncryptedObjects,
+    SseKmsStatus,
+    TransferType,
+    UserTagging,
+    UserTaggingFilterType,
     UserTaggings,
 };
 pub use resource_pool::{
-    GroupBucketInfo, ResourcePool, ResourcePoolBucket, ResourcePoolBucketGroup,
+    GroupBucketInfo,
+    ResourcePool,
+    ResourcePoolBucket,
+    ResourcePoolBucketGroup,
     ResourcePoolBucketGroupQoSInfo,
 };
 pub use storage_class::{DataRedundancyType, StorageClass};
 pub use tag::{Tag, TagSet, Tagging};
+pub use vector::{
+    Vector,
+    VectorData,
+    VectorDataType,
+    VectorDistanceMetric,
+    VectorIndexInfo,
+    VectorIndexMetadata,
+    VectorIndexStatus,
+};

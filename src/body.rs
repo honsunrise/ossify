@@ -56,6 +56,26 @@ where
     }
 }
 
+/// JSON-encoded request body. Used by Vector Bucket operations, which always
+/// accept `application/json` bodies with camelCase field names.
+pub struct JSONBody<T>(PhantomData<T>);
+
+impl<T> MakeBody for JSONBody<T>
+where
+    T: Serialize,
+{
+    type Body = T;
+
+    fn make_body(body: Self::Body, request: &mut reqwest::Request) -> Result<()> {
+        let body = serde_json::to_vec(&body)?;
+        let headers = request.headers_mut();
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_str(&body.len().to_string())?);
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        request.body_mut().replace(Body::from(body));
+        Ok(())
+    }
+}
+
 /// Body of pre-serialized bytes with an explicit Content-Type. Useful for
 /// operations like `PutBucketPolicy` that accept a raw JSON payload.
 pub struct BytesBody;
