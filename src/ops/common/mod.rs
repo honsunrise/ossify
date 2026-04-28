@@ -56,7 +56,7 @@ pub use object_fc_access_point::{
 pub use object_type::ObjectType;
 pub use owner::Owner;
 pub use public_access_block::PublicAccessBlockConfiguration;
-pub use qos::QoSConfiguration;
+pub use qos::{QoSConfiguration, RequesterQoSInfo};
 pub use redundancy_transition::RedundancyTransitionStatus;
 pub use replication::{
     HistoricalObjectReplication, LocationTransferType, LocationTransferTypeConstraint, PrefixSet,

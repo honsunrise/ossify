@@ -69,6 +69,17 @@ impl QoSConfiguration {
     }
 }
 
+/// One `<RequesterQoSInfo>` entry, returned by Get/List requester-QoS APIs
+/// at either bucket or resource-pool scope.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename = "RequesterQoSInfo", rename_all = "PascalCase")]
+pub struct RequesterQoSInfo {
+    /// Alibaba Cloud UID of the requester.
+    pub requester: String,
+    #[serde(rename = "QoSConfiguration")]
+    pub qos_configuration: QoSConfiguration,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
