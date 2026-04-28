@@ -15,15 +15,13 @@
 
 pub mod bucket;
 pub mod index;
+pub mod vectors;
 
 pub use bucket::*;
 pub use index::*;
+pub use vectors::*;
 
-/// Aggregate supertrait for vector-bucket operations.
-///
-/// Batches 22a–22b cover bucket-lifecycle and index operations; vector
-/// data-plane operations (Put/Get/List/Delete/Query vectors) will be added
-/// in batch 22c.
+/// Aggregate supertrait for all 13 vector-bucket APIs.
 pub trait VectorBucketOperations:
     PutVectorBucketOps
     + GetVectorBucketOps
@@ -33,6 +31,11 @@ pub trait VectorBucketOperations:
     + GetVectorIndexOps
     + ListVectorIndexesOps
     + DeleteVectorIndexOps
+    + PutVectorsOps
+    + GetVectorsOps
+    + ListVectorsOps
+    + DeleteVectorsOps
+    + QueryVectorsOps
 {
 }
 impl<T> VectorBucketOperations for T where
@@ -44,5 +47,10 @@ impl<T> VectorBucketOperations for T where
         + GetVectorIndexOps
         + ListVectorIndexesOps
         + DeleteVectorIndexOps
+        + PutVectorsOps
+        + GetVectorsOps
+        + ListVectorsOps
+        + DeleteVectorsOps
+        + QueryVectorsOps
 {
 }
