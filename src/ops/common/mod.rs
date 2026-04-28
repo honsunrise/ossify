@@ -18,6 +18,7 @@ mod object_fc_access_point;
 mod object_type;
 mod owner;
 mod public_access_block;
+mod qos;
 mod redundancy_transition;
 mod replication;
 mod storage_class;
@@ -55,6 +56,7 @@ pub use object_fc_access_point::{
 pub use object_type::ObjectType;
 pub use owner::Owner;
 pub use public_access_block::PublicAccessBlockConfiguration;
+pub use qos::QoSConfiguration;
 pub use redundancy_transition::RedundancyTransitionStatus;
 pub use replication::{
     HistoricalObjectReplication, LocationTransferType, LocationTransferTypeConstraint, PrefixSet,
