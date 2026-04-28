@@ -69,6 +69,7 @@ pub use replication::{
 };
 pub use resource_pool::{
     GroupBucketInfo, ResourcePool, ResourcePoolBucket, ResourcePoolBucketGroup,
+    ResourcePoolBucketGroupQoSInfo,
 };
 pub use storage_class::{DataRedundancyType, StorageClass};
 pub use tag::{Tag, TagSet, Tagging};
