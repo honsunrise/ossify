@@ -78,6 +78,27 @@ impl ResponseProcessor for BinaryResponseProcessor {
     }
 }
 
+/// Response processor that hands back the underlying `reqwest::Response` so
+/// callers can stream the body themselves. Used by APIs such as `SelectObject`
+/// that return a custom framed binary protocol the SDK then decodes lazily.
+pub struct StreamResponseProcessor;
+
+impl ResponseProcessor for StreamResponseProcessor {
+    type Output = reqwest::Response;
+
+    async fn from_response(resp: reqwest::Response) -> Result<Self::Output> {
+        let status = resp.status();
+        // `SelectObject` signals "data is still being returned" with
+        // `206 Partial Content`; treat any 2xx as success and leave body
+        // parsing up to the caller.
+        if status.is_success() {
+            Ok(resp)
+        } else {
+            Err(process_response_error(resp).await?)
+        }
+    }
+}
+
 pub struct HeaderResponseProcessor<T>(PhantomData<T>);
 
 impl<T> ResponseProcessor for HeaderResponseProcessor<T>
