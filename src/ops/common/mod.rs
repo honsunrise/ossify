@@ -21,6 +21,7 @@ mod public_access_block;
 mod qos;
 mod redundancy_transition;
 mod replication;
+mod resource_pool;
 mod storage_class;
 mod tag;
 
@@ -65,6 +66,9 @@ pub use replication::{
     ReplicationRule, ReplicationRuleStatus, Rtc, RtcStatus, SourceSelectionCriteria,
     SseKmsEncryptedObjects, SseKmsStatus, TransferType, UserTagging, UserTaggingFilterType,
     UserTaggings,
+};
+pub use resource_pool::{
+    GroupBucketInfo, ResourcePool, ResourcePoolBucket, ResourcePoolBucketGroup,
 };
 pub use storage_class::{DataRedundancyType, StorageClass};
 pub use tag::{Tag, TagSet, Tagging};
