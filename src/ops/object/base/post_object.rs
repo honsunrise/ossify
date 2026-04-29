@@ -187,7 +187,7 @@ pub struct PostObjectSignV1Input<'a> {
 ///
 /// Returned `credential` and `date` fields are empty for V1 (not used).
 pub fn sign_post_object_v1(input: PostObjectSignV1Input<'_>) -> Result<PostObjectFormFields> {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha1::Sha1;
 
     let policy_b64 = input.policy.to_base64()?;

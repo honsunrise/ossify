@@ -199,7 +199,7 @@ pub(crate) fn sha256_hex(message: &str) -> String {
 
 #[inline]
 pub(crate) fn hmac256(key: &[u8], message: &str) -> Result<Vec<u8>> {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     let mut mac = Hmac::<Sha256>::new_from_slice(key)?;
