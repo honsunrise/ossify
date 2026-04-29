@@ -1,43 +1,55 @@
-# Ossify - Alibaba Cloud OSS SDK for Rust
+# Ossify — Alibaba Cloud OSS SDK for Rust
 
-[![Rust](https://img.shields.io/badge/rust-nightly-brightgreen.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-brightgreen.svg)](https://www.rust-lang.org)
 [![Crates.io](https://img.shields.io/crates/v/ossify.svg)](https://crates.io/crates/ossify)
 [![Documentation](https://docs.rs/ossify/badge.svg)](https://docs.rs/ossify)
 [![MIT/Apache-2 licensed](https://img.shields.io/crates/l/ossify.svg)](LICENSE-APACHE)
 
-A **modern**, **easy-to-use**, and **reqwest-powered** Rust SDK for Alibaba Cloud Object Storage Service (OSS). Built with developer experience in mind, this SDK provides a clean, intuitive API that makes working with OSS straightforward and enjoyable.
+A **modern**, **complete**, and **reqwest-powered** Rust SDK for Alibaba
+Cloud Object Storage Service (OSS). Ossify aims for parity with the
+official Python / Go v2 SDKs while keeping the API ergonomic and
+type-safe.
 
-## ✨ Key Features
+## ✨ Highlights
 
-- **🚀 Reqwest-Powered**: Built on top of the battle-tested `reqwest` HTTP client with full async/await support
-- **🎯 Developer-Friendly**: Clean, intuitive API designed for ease of use and developer productivity
-- **🔐 Secure by Default**: Full support for OSS authentication, including temporary credentials and STS tokens
-- **📦 Complete Coverage**: Comprehensive support for bucket operations, object management, and multipart uploads
-- **🛡️ Type-Safe**: Leverages Rust's type system to prevent common errors at compile time
-- **⚡ Performance**: Optimized for speed with streaming support and efficient memory usage
-- **🔧 Flexible**: Multiple URL styles (Virtual Hosted, Path-style, CNAME) and customizable configurations
+- **🎯 Full API surface** — **~190 operations** across every category listed
+  in the [official OSS operations index](https://www.alibabacloud.com/help/en/oss/developer-reference/list-of-operations-by-function):
+  bucket lifecycle, object CRUD, multipart upload, lifecycle, versioning,
+  replication, inventory, logging, retention, access points, data indexing,
+  DDoS protection, LiveChannel streaming, Resource Pool QoS, Vector Bucket
+  (with ANN search), SelectObject SQL, and more.
+- **🚀 reqwest-powered** — built on `reqwest` 0.13 with full async/await,
+  streaming uploads/downloads, and `rustls` by default.
+- **🔐 V4 signing + flexible credentials** — OSS V4 signature for both
+  request signing and presigned URLs, with a default credentials chain
+  covering explicit AK/SK, environment variables, and RRSA/OIDC for ACK.
+- **🛡️ Type-safe** — every API is one `struct` + one sub-trait; responses
+  are strongly typed (deserialized from XML or JSON as required).
+- **🧱 Modular** — one file per API under `src/ops/{bucket,object,service,
+vector_bucket}/<category>/`, with `Operations` aggregate supertraits for
+  convenient blanket imports.
+- **🎨 Consistent ergonomics** — request parameters use builder methods,
+  path/query segments are escaped correctly, and single-byte delimiters or
+  base64 SQL expressions are encoded for you.
 
-## 🚀 Quick Start
-
-Add this to your `Cargo.toml`:
+## 🚀 Quick start
 
 ```toml
 [dependencies]
-ossify = "0.1.0"
-tokio = { version = "1.0", features = ["full"] }
+ossify = "0.4"
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
 ```
 
-### Basic Example
+### Hello, OSS
 
-```rust
-
+```rust,no_run
+use bytes::Bytes;
 use ossify::Client;
-use ossify::ops::bucket::BucketOperations;
-use ossify::ops::object::base::*;
+use ossify::ops::object::base::{GetObjectOps, GetObjectParams, PutObjectOps};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a client
     let client = Client::builder()
         .endpoint("https://oss-cn-hangzhou.aliyuncs.com")
         .region("cn-hangzhou")
@@ -46,158 +58,301 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .access_key_secret("your-access-key-secret")
         .build()?;
 
-    // Upload a file
-    let data = b"Hello, OSS!";
-    let response = client.put_object("hello.txt", data, None).await?;
-    println!("Upload successful! ETag: {}", response.etag);
+    // Upload
+    let put = client
+        .put_object("hello.txt", Bytes::from_static(b"Hello, OSS!"), None)
+        .await?;
+    println!("ETag = {}", put.etag);
 
-    // Download the file
-    let content = client.get_object("hello.txt", Default::default(), None).await?;
-    println!("Downloaded content: {}", String::from_utf8_lossy(&content));
+    // Download
+    let body = client
+        .get_object("hello.txt", GetObjectParams::new(), None)
+        .await?;
+    println!("{}", String::from_utf8_lossy(&body));
 
     Ok(())
 }
 ```
 
-## 📚 Core Operations
+## 📚 API coverage at a glance
 
-### Bucket Operations
+Every entry below maps to one or more ready-to-call methods. Click
+through to the module to discover the exact parameter and response types.
 
-```rust
-use ossify::ops::bucket::*;
+### Service-level (`ossify::ops::service`)
 
-// Create a bucket
-let config = PutBucketConfiguration::new();
+| Group                            | APIs                                                                                                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Regions & buckets                | `DescribeRegions`, `ListBuckets`                                                                                                                                                                                |
+| User-level Anti-DDoS             | `InitUserAntiDDosInfo`, `UpdateUserAntiDDosInfo`, `GetUserAntiDDosInfo`                                                                                                                                         |
+| User-level PublicAccessBlock     | `PutPublicAccessBlock`, `GetPublicAccessBlock`, `DeletePublicAccessBlock`                                                                                                                                       |
+| Data redundancy                  | `ListUserDataRedundancyTransition`                                                                                                                                                                              |
+| Resource Pool (`resource_pool/`) | `ListResourcePools`, `GetResourcePoolInfo`, `ListResourcePoolBuckets`, Put/Get/List/Delete `ResourcePoolRequesterQoSInfo`, `ListResourcePoolBucketGroups`, Put/Get/List/Delete `ResourcePoolBucketGroupQoSInfo` |
+
+### Bucket-level (`ossify::ops::bucket`)
+
+| Category                                          | APIs                                                                                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base/`                                           | `PutBucket`, `GetBucketInfo`, `GetBucketLocation`, `GetBucketStat`, `DeleteBucket`, `ListObjects` (v2), `ListObjectsV1`, `ListObjectVersions`       |
+| `acl/`                                            | `PutBucketACL`, `GetBucketACL`                                                                                                                      |
+| `access_monitor/`                                 | Put/Get                                                                                                                                             |
+| `access_point/`                                   | CreateAccessPoint, GetAccessPoint, DeleteAccessPoint, ListAccessPoints, Put/Get/Delete AccessPointPolicy                                            |
+| `object_fc_access_point/`                         | Create/Get/Delete/ListAccessPointForObjectProcess, Put/Get/DeleteAccessPointConfigForObjectProcess, Put/Get/DeleteAccessPointPolicyForObjectProcess |
+| `anti_ddos/`                                      | Init/Update/Get BucketAntiDDosInfo                                                                                                                  |
+| `archive_direct_read/`                            | Put/Get                                                                                                                                             |
+| `cname/`                                          | Create/Delete/List CnameToken, Put/Get BucketCnameToken                                                                                             |
+| `cors/`                                           | Put/Get/Delete + GetBucketOptions (preflight)                                                                                                       |
+| `data_accelerator/`                               | Put/Get/Delete                                                                                                                                      |
+| `data_indexing/`                                  | Open/Get/Close/DoMetaQuery                                                                                                                          |
+| `encryption/`                                     | Put/Get/Delete                                                                                                                                      |
+| `https_config/`                                   | Put/Get                                                                                                                                             |
+| `inventory/`                                      | Put/Get/List/Delete                                                                                                                                 |
+| `lifecycle/`                                      | Put/Get/Delete                                                                                                                                      |
+| `live_channel/`                                   | Put/Put-status/Get-info/Get-stat/Get-history/List/Delete LiveChannel, Post/Get VodPlaylist                                                          |
+| `logging/`                                        | Put/Get/Delete + CNAME variants                                                                                                                     |
+| `policy/`                                         | Put/Get/Delete/GetPolicyStatus                                                                                                                      |
+| `public_access_block/`                            | Put/Get/Delete (+ access-point variants)                                                                                                            |
+| `qos/` + `requester_qos/`                         | Bucket-total QoS and per-requester QoS (Put/Get/List/Delete)                                                                                        |
+| `redundancy_transition/`                          | Create/Get/Delete/List BucketDataRedundancyTransition                                                                                               |
+| `referer/`                                        | Put/Get                                                                                                                                             |
+| `replication/`                                    | Put/Get/Delete, ListReplicationLocation, ListReplicationRules, GetBucketReplicationProgress                                                         |
+| `request_payment/`                                | Put/Get                                                                                                                                             |
+| `resource_group/` + `resource_pool_bucket_group/` | Put/Get resource group; Put bucket→pool-group mapping                                                                                               |
+| `retention/`                                      | InitiateBucketWorm, CompleteBucketWorm, AbortBucketWorm, ExtendBucketWormWorm, GetBucketWorm                                                        |
+| `style/`                                          | Put/Get/List/Delete                                                                                                                                 |
+| `tagging/`                                        | Put/Get/Delete                                                                                                                                      |
+| `transfer_acceleration/`                          | Put/Get                                                                                                                                             |
+| `versioning/`                                     | Put/Get + RestoreObject (bucket-scope)                                                                                                              |
+| `website/`                                        | Put/Get/Delete                                                                                                                                      |
+
+### Object-level (`ossify::ops::object`)
+
+| Category            | APIs                                                                                                                                                                                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base/`             | PutObject (body / stream), GetObject (with `Range`, presigned URL), HeadObject, GetObjectMeta, CopyObject, DeleteObject, DeleteMultipleObjects, AppendObject, SealAppendObject, RestoreObject, CleanRestoredObject, PostObject (helpers) + Callback helpers |
+| `acl/`              | PutObjectACL, GetObjectACL                                                                                                                                                                                                                                  |
+| `folder/` (HNS)     | CreateDirectory, Rename, DeleteDirectory                                                                                                                                                                                                                    |
+| `multipart_upload/` | InitiateMultipartUpload, UploadPart, UploadPartCopy, ListMultipartUploads, ListParts, CompleteMultipartUpload, AbortMultipartUpload                                                                                                                         |
+| `select/`           | SelectObject (CSV & JSON, SQL → frame stream), CreateSelectCsvObjectMeta, CreateSelectJsonObjectMeta                                                                                                                                                        |
+| `symbolic_link/`    | PutSymlink, GetSymlink                                                                                                                                                                                                                                      |
+| `tagging/`          | Put/Get/Delete                                                                                                                                                                                                                                              |
+
+### Vector Bucket (`ossify::ops::vector_bucket`, JSON on `oss-vectors.aliyuncs.com`)
+
+| Category   | APIs                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| `bucket/`  | PutVectorBucket, GetVectorBucket, ListVectorBuckets, DeleteVectorBucket                                 |
+| `index/`   | PutVectorIndex, GetVectorIndex, ListVectorIndexes, DeleteVectorIndex                                    |
+| `vectors/` | PutVectors, GetVectors, ListVectors, DeleteVectors, QueryVectors (top-K ANN with MongoDB-style filters) |
+
+## 🧭 Usage guide by feature
+
+### Buckets and objects
+
+```rust,no_run
+use bytes::Bytes;
+use ossify::Client;
+use ossify::ops::bucket::base::{
+    DeleteBucketOps, ListObjectsOps, PutBucketConfiguration, PutBucketOps,
+};
+use ossify::ops::common::{DataRedundancyType, StorageClass};
+use ossify::ops::object::base::{
+    DeleteObjectOps, GetObjectOps, GetObjectOptions, GetObjectParams, HeadObjectOps,
+    PutObjectOps, PutObjectOptions,
+};
+
+# async fn demo(client: &Client) -> Result<(), ossify::Error> {
+// Create a bucket (LRS Standard)
+let config = PutBucketConfiguration {
+    storage_class: Some(StorageClass::Standard),
+    data_redundancy_type: Some(DataRedundancyType::LocallyRedundantStorage),
+};
 client.put_bucket(config, None).await?;
 
-// List objects
-let options = ListObjectsOptions::new().max_keys(100);
-let result = client.list_objects(Some(options)).await?;
-
-// Get bucket info
-let info = client.get_bucket_info().await?;
-println!("Bucket: {}, Location: {}", info.name, info.location);
-
-// Delete bucket
-client.delete_bucket().await?;
-```
-
-### Object Operations
-
-```rust
-use ossify::ops::object::base::*;
-
-// Upload object with options
+// Upload with options
 let options = PutObjectOptions::new()
     .content_type("text/plain")
-    .storage_class(StorageClass::Standard);
-client.put_object("file.txt", data, Some(options)).await?;
+    .storage_class(StorageClass::InfrequentAccess);
+client
+    .put_object("file.txt", Bytes::from_static(b"hello"), Some(options))
+    .await?;
 
-// Download with range
-let params = GetObjectParams::new();
-let options = GetObjectOptions::new().range("bytes=0-1023");
-let content = client.get_object("file.txt", params, Some(options)).await?;
+// Range download
+let range_opts = GetObjectOptions::new().range("bytes=0-1023");
+let chunk = client
+    .get_object("file.txt", GetObjectParams::new(), Some(range_opts))
+    .await?;
 
-// Get object metadata
-let metadata = client.head_object("file.txt", None).await?;
-println!("Size: {}, Last Modified: {:?}", metadata.content_length, metadata.last_modified);
+// Metadata
+let meta = client.head_object("file.txt", None).await?;
+println!("Content-Length: {:?}", meta.content_length);
 
-// Delete object
+// List (v2)
+let page = client.list_objects(None).await?;
+println!("Found {} objects", page.contents.len());
+
+// Clean up
 client.delete_object("file.txt", None).await?;
+client.delete_bucket().await?;
+# Ok(()) }
 ```
 
-### Multipart Upload
+### Multipart upload
 
-```rust
-use ossify::ops::object::multipart_upload::*;
+```rust,no_run
+use bytes::Bytes;
+use ossify::Client;
+use ossify::ops::object::multipart_upload::{
+    AbortMultipartUploadOperations, CompleteMultipartUploadOperations,
+    InitiateMultipartUploadOperations, Part, UploadPartOperations,
+};
 
-// Initialize multipart upload
-let result = client.initiate_multipart_upload("large-file.bin", None).await?;
-let upload_id = result.upload_id;
+# async fn multipart(client: &Client, chunk1: Bytes, chunk2: Bytes)
+#   -> Result<(), ossify::Error> {
+let init = client.initiate_multipart_upload("big.bin", None).await?;
+let upload_id = init.upload_id;
 
-// Upload parts
-let part1 = client.upload_part("large-file.bin", &upload_id, 1, &chunk1).await?;
-let part2 = client.upload_part("large-file.bin", &upload_id, 2, &chunk2).await?;
+let p1 = client.upload_part("big.bin", &upload_id, 1, chunk1).await?;
+let p2 = client.upload_part("big.bin", &upload_id, 2, chunk2).await?;
 
-// Complete upload
-let parts = vec![
-    Part::new(1, part1.etag),
-    Part::new(2, part2.etag),
-];
-let options = CompleteMultipartUploadOptions::new().parts(parts);
-client.complete_multipart_upload("large-file.bin", &upload_id, Some(options)).await?;
+let parts = vec![Part::new(1, p1.etag), Part::new(2, p2.etag)];
+client
+    .complete_multipart_upload("big.bin", &upload_id, parts, None)
+    .await?;
+# Ok(()) }
+```
+
+### Vector Bucket (ANN search)
+
+Vector bucket APIs live on a dedicated `{region}.oss-vectors.aliyuncs.com`
+endpoint family. Point a separate `Client` at that endpoint to use them:
+
+```rust,no_run
+use ossify::Client;
+use ossify::ops::common::{VectorData, VectorDistanceMetric};
+use ossify::ops::vector_bucket::{
+    PutVectorBucketOps, PutVectorIndexOps, PutVectorIndexRequest, PutVectorsOps,
+    PutVectorsRequest, QueryVectorsOps, QueryVectorsRequest, VectorFilter,
+};
+use ossify::ops::common::Vector;
+
+# async fn vectors(client: &Client) -> Result<(), ossify::Error> {
+client.put_vector_bucket().await?;
+
+client
+    .put_vector_index(PutVectorIndexRequest::new(
+        "docs",
+        1024,
+        VectorDistanceMetric::Cosine,
+    ))
+    .await?;
+
+client
+    .put_vectors(PutVectorsRequest {
+        index_name: "docs".into(),
+        vectors: vec![Vector {
+            key: "doc-1".into(),
+            data: Some(VectorData::new(vec![0.1; 1024])),
+            metadata: None,
+            distance: None,
+        }],
+    })
+    .await?;
+
+let hits = client
+    .query_vectors(
+        QueryVectorsRequest::new("docs", VectorData::new(vec![0.1; 1024]), 5)
+            .filter(VectorFilter::eq("lang", "en"))
+            .return_distance(true),
+    )
+    .await?;
+for hit in hits.vectors {
+    println!("{} -> distance={:?}", hit.key, hit.distance);
+}
+# Ok(()) }
+```
+
+### SelectObject (SQL over CSV / JSON)
+
+`SelectObject` returns a stream of frames — data, heartbeats, and a
+terminal status frame that must be inspected for errors:
+
+```rust,no_run
+use futures::StreamExt;
+use ossify::Client;
+use ossify::ops::object::select::{
+    CsvInputSerialization, CsvOutputSerialization, SelectFrame, SelectObjectOps, SelectRequest,
+};
+
+# async fn run_query(client: &Client) -> Result<(), ossify::Error> {
+let req = SelectRequest::new_csv(
+    "select _1, _2 from ossobject where _3 > 100",
+    CsvInputSerialization::default(),
+    CsvOutputSerialization::default(),
+)
+.with_payload_crc(true);
+
+let mut frames = client.select_object_csv("data.csv", req).await?;
+
+while let Some(frame) = frames.next().await {
+    match frame? {
+        SelectFrame::Data { data, .. } => print!("{}", String::from_utf8_lossy(&data)),
+        SelectFrame::End { status, error_message, .. } => {
+            if status != 200 && status != 206 {
+                eprintln!("select failed: {status} {error_message}");
+            }
+            break;
+        }
+        _ => {}
+    }
+}
+# Ok(()) }
 ```
 
 ## 🔧 Configuration
 
-### Client Builder
+### Client builder
 
-The SDK provides a flexible builder pattern for configuration:
-
-```rust
-use ossify::{Client, UrlStyle};
+```rust,no_run
 use std::time::Duration;
 
+use ossify::{Client, UrlStyle};
+
+# fn demo() -> Result<(), ossify::Error> {
 let client = Client::builder()
-    .endpoint("https://oss-cn-hangzhou.aliyuncs.com")
-    .public_endpoint("https://oss-cn-hangzhou.aliyuncs.com") // Optional
+    .endpoint("https://oss-cn-hangzhou-internal.aliyuncs.com")
+    .public_endpoint("https://oss-cn-hangzhou.aliyuncs.com")
     .region("cn-hangzhou")
     .bucket("my-bucket")
     .access_key_id("your-access-key-id")
     .access_key_secret("your-access-key-secret")
-    .security_token("your-sts-token") // Optional, for temporary credentials
+    .security_token("your-sts-token")           // optional
     .http_timeout(Duration::from_secs(30))
-    .url_style(UrlStyle::VirtualHosted) // VirtualHosted, Path, or CName
+    .url_style(UrlStyle::VirtualHosted)         // VirtualHosted | Path | CName
     .build()?;
+# Ok(()) }
 ```
 
-### URL Styles
+URL styles:
 
 - **VirtualHosted** (default): `https://bucket.oss-cn-hangzhou.aliyuncs.com/object`
 - **Path**: `https://oss-cn-hangzhou.aliyuncs.com/bucket/object`
-- **CNAME**: `https://custom-domain.com/object`
+- **CName**: `https://custom-domain.com/object`
 
-### Authentication
+### Credentials
 
-The SDK supports multiple authentication methods:
+Explicit AK/SK, STS token, RRSA (ACK OIDC), or the default chain — all
+via the same `Client::builder()`:
 
-```rust
-// Basic credentials
-let client = Client::builder()
-    .access_key_id("your-key")
-    .access_key_secret("your-secret")
-    .build()?;
-
-// With STS token (temporary credentials)
-let client = Client::builder()
-    .access_key_id("your-key")
-    .access_key_secret("your-secret")
-    .security_token("your-sts-token")
-    .build()?;
-```
-
-#### RRSA (RAM Roles for Service Accounts)
-
-When running inside ACK (Alibaba Cloud Container Service for Kubernetes),
-pods configured with a service-account-bound RAM role get the following
-environment variables injected automatically:
-
-- `ALIBABA_CLOUD_ROLE_ARN`
-- `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`
-- `ALIBABA_CLOUD_OIDC_TOKEN_FILE`
-
-Use `RrsaCredentialsProvider` to exchange the OIDC token for temporary STS
-credentials. Tokens are cached and refreshed automatically before they
-expire.
-
-```rust
+```rust,no_run
 use ossify::Client;
 use ossify::credentials::RrsaCredentialsProvider;
 
-// Option 1: read configuration from the environment (the typical ACK case).
-let http_client = reqwest::Client::new();
-let rrsa = RrsaCredentialsProvider::from_env(http_client)
-    .expect("RRSA env vars are set");
+# fn demo() -> Result<(), ossify::Error> {
+// ACK RRSA pod — reads ALIBABA_CLOUD_ROLE_ARN /
+// ALIBABA_CLOUD_OIDC_PROVIDER_ARN / ALIBABA_CLOUD_OIDC_TOKEN_FILE.
+let http = reqwest::Client::new();
+let rrsa = RrsaCredentialsProvider::from_env(http).expect("RRSA env set");
 
 let client = Client::builder()
     .endpoint("https://oss-cn-hangzhou-internal.aliyuncs.com")
@@ -205,128 +360,120 @@ let client = Client::builder()
     .bucket("my-bucket")
     .credentials_provider(rrsa)
     .build()?;
-
-// Option 2: configure RRSA explicitly.
-let rrsa = RrsaCredentialsProvider::builder()
-    .role_arn("acs:ram::123456789012:role/my-role")
-    .oidc_provider_arn("acs:ram::123456789012:oidc-provider/my-provider")
-    .oidc_token_file_path("/var/run/secrets/tokens/oidc-token")
-    .role_session_name("my-app")        // optional
-    .session_duration_seconds(3600)     // optional, default 3600
-    .build()?;
+# Ok(()) }
 ```
 
-#### Default credentials chain (zero-config)
+If neither `access_key_id` / `access_key_secret` nor an explicit
+`credentials_provider` is supplied, the builder falls back to
+`DefaultCredentialsChain`, which walks:
 
-If neither explicit AK/SK nor an explicit `credentials_provider` is passed to
-`ClientBuilder`, the SDK falls back to `DefaultCredentialsChain`, which walks:
+1. `EnvironmentCredentialsProvider` — reads
+   `ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`
+   (+ optional `ALIBABA_CLOUD_SECURITY_TOKEN`) or the `OSS_*` equivalents.
+2. `RrsaCredentialsProvider::from_env` — RRSA/OIDC if its env vars exist.
 
-1. `EnvironmentCredentialsProvider` – `ALIBABA_CLOUD_ACCESS_KEY_ID` /
-   `ALIBABA_CLOUD_ACCESS_KEY_SECRET` (+ optional
-   `ALIBABA_CLOUD_SECURITY_TOKEN`) or the `OSS_*` equivalents.
-2. `RrsaCredentialsProvider::from_env` – RRSA/OIDC, if the appropriate
-   environment variables are set.
-
-```rust
-// No credentials passed explicitly – the client reads them from the
-// environment / RRSA automatically.
-let client = Client::builder()
-    .endpoint("https://oss-cn-hangzhou.aliyuncs.com")
-    .region("cn-hangzhou")
-    .bucket("my-bucket")
-    .build()?;
-```
-
-## 🌟 Advanced Features
+## 🌟 Advanced features
 
 ### Presigned URLs
 
-Generate presigned URLs for secure, temporary access:
+```rust,no_run
+use ossify::{Client, QueryAuthOptions};
+use ossify::ops::object::base::{GetObjectOps, GetObjectParams};
 
-```rust
-use ossify::QueryAuthOptions;
-
-let auth_options = QueryAuthOptions::builder()
-    .expires_in(3600) // 1 hour
-    .build()?;
-
-let url = client.presign_get_object(
-    "private-file.jpg",
-    true, // public endpoint
-    GetObjectParams::new(),
-    None,
-    auth_options
-).await?;
-
-println!("Presigned URL: {}", url);
+# async fn presign(client: &Client) -> Result<(), ossify::Error> {
+let opts = QueryAuthOptions::builder().expires_in(3600).build()?;
+let url = client
+    .presign_get_object(
+        "private-file.jpg",
+        true, // public endpoint
+        GetObjectParams::new(),
+        None,
+        opts,
+    )
+    .await?;
+println!("presigned = {url}");
+# Ok(()) }
 ```
 
-### Streaming Support
+### Streaming uploads
 
-Efficient handling of large files with streaming:
+`put_object_stream` / `upload_part_stream` accept any
+`futures::TryStream<Ok = bytes::Bytes>` so large files and back-pressured
+producers (e.g. channels, `reqwest::Response::bytes_stream()`) can be
+forwarded without buffering into memory.
 
-```rust
-// The SDK uses reqwest's streaming capabilities internally
-// for efficient memory usage with large objects
-```
+### Error handling
 
-### Error Handling
+```rust,no_run
+use ossify::{Client, Error};
+use ossify::ops::object::base::{GetObjectOps, GetObjectParams};
 
-Comprehensive error types for robust applications:
-
-```rust
-use ossify::Error;
-
-match client.get_object("nonexistent.txt", Default::default(), None).await {
-    Ok(content) => println!("File content: {:?}", content),
-    Err(Error::HttpError(status)) if status.as_u16() == 404 => {
-        println!("File not found");
-    },
-    Err(e) => eprintln!("Error: {}", e),
+# async fn handle(client: &Client) {
+match client
+    .get_object("missing.txt", GetObjectParams::new(), None)
+    .await
+{
+    Ok(bytes) => println!("{} bytes", bytes.len()),
+    Err(Error::ApiError { status_code, message }) if status_code.as_u16() == 404 => {
+        println!("not found: {message:?}");
+    }
+    Err(e) => eprintln!("other error: {e}"),
 }
+# }
 ```
 
 ## 🏗️ Architecture
 
-This SDK is built with modern Rust practices:
+- **One API = one file**: every OSS operation lives in its own
+  `src/ops/.../<operation>.rs` exposing a `struct`, optional
+  `Params`/`Options`, a `<Name>Ops` sub-trait, and a blanket `impl for Client`. Category `mod.rs` files aggregate sub-traits into
+  `Operations` supertraits for convenient mass-imports.
+- **Shared XML / JSON types** live in `src/ops/common/`.
+- **Uniform request pipeline** (`src/lib.rs`): every `Ops` declares a
+  `Body` (`NoneBody` | `ZeroBody` | `XMLBody<T>` | `JSONBody<T>` |
+  `BytesBody` | `StreamBody<S>`), a `Response` processor
+  (`EmptyResponseProcessor` | `BodyResponseProcessor<T>` |
+  `HeaderResponseProcessor<T>` | `BinaryResponseProcessor` |
+  `StreamResponseProcessor`), and a `Query` type that serialises to an
+  alphabetically-sorted query string.
+- **Signing**: OSS V4 (`OSS4-HMAC-SHA256`) used for both request
+  `Authorization` headers and presigned URLs.
+- **Single-endpoint client**: one `Client` instance targets one endpoint
+  family. Vector Bucket uses a dedicated `oss-vectors` endpoint, so keep
+  a separate `Client` for vector operations.
 
-- **Async/Await**: Full async support powered by `tokio` and `reqwest`
-- **Type Safety**: Leverages Rust's type system to prevent errors
-- **Zero-Copy**: Efficient memory usage with `Cow` and `Bytes`
-- **Modular Design**: Clean separation of concerns with trait-based architecture
-- **Comprehensive**: Covers all major OSS operations
+### Core dependencies
 
-### Core Dependencies
-
-- **reqwest**: HTTP client with async support and robust error handling
-- **tokio**: Async runtime for high-performance I/O
-- **serde**: Serialization/deserialization for API requests/responses
-- **chrono**: Date/time handling for OSS operations
-- **bytes**: Efficient byte buffer management
+- [`reqwest`](https://docs.rs/reqwest) — HTTP with `rustls-no-provider` and streaming.
+- [`tokio`](https://docs.rs/tokio) / [`futures`](https://docs.rs/futures) — async runtime and stream primitives.
+- [`serde`](https://docs.rs/serde) + [`serde_json`](https://docs.rs/serde_json)
+- [`quick-xml`](https://docs.rs/quick-xml) — request/response encoding.
+- [`jiff`](https://docs.rs/jiff) — timestamps and durations.
+- [`bytes`](https://docs.rs/bytes) — zero-copy byte buffers.
+- [`hmac`](https://docs.rs/hmac) + [`sha2`](https://docs.rs/sha2) +
+- [`sha1`](https://docs.rs/sha1) + [`crc32fast`](https://docs.rs/crc32fast) — signing and SelectObject payload CRC.
 
 ## 📖 Documentation
 
-For detailed documentation and examples, visit:
-
-- [API Documentation](https://docs.rs/ossify)
-- [Official OSS Documentation](https://www.alibabacloud.com/help/en/oss/)
+- [API docs on docs.rs](https://docs.rs/ossify)
+- [OSS operations index](https://www.alibabacloud.com/help/en/oss/developer-reference/list-of-operations-by-function)
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+PRs are very welcome — please open an issue first for large changes.
+Every API file should include unit tests for (a) query-parameter
+serialisation and (b) XML/JSON round-tripping; `cargo test --lib` +
+`cargo clippy --lib --tests` must both be clean.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Licensed under either of
 
-## 🙏 Acknowledgments
+- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
 
-- Built with [reqwest](https://github.com/seanmonstar/reqwest) - the amazing HTTP client for Rust
-- Inspired by the need for a modern, easy-to-use OSS SDK in the Rust ecosystem
-- Thanks to the Alibaba Cloud team for providing comprehensive OSS documentation
+at your option.
 
 ---
 
-<p align="center">
-<strong>Happy coding with OSS and Rust! 🦀✨</strong>
-</p>
+<p align="center"><strong>Happy coding with OSS and Rust! 🦀✨</strong></p>
