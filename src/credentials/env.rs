@@ -1,3 +1,5 @@
+use std::env;
+
 use crate::credentials::{Credentials, CredentialsProvider};
 use crate::{Error, Result};
 
@@ -26,12 +28,12 @@ impl EnvironmentCredentialsProvider {
     fn read() -> Option<Credentials> {
         // Prefer the generic Alibaba Cloud variables.
         if let (Ok(ak), Ok(sk)) = (
-            std::env::var("ALIBABA_CLOUD_ACCESS_KEY_ID"),
-            std::env::var("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
+            env::var("ALIBABA_CLOUD_ACCESS_KEY_ID"),
+            env::var("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
         ) && !ak.is_empty()
             && !sk.is_empty()
         {
-            let token = std::env::var("ALIBABA_CLOUD_SECURITY_TOKEN")
+            let token = env::var("ALIBABA_CLOUD_SECURITY_TOKEN")
                 .ok()
                 .filter(|s| !s.is_empty());
             return Some(match token {
@@ -41,11 +43,11 @@ impl EnvironmentCredentialsProvider {
         }
 
         // Fall back to the OSS-specific variables.
-        if let (Ok(ak), Ok(sk)) = (std::env::var("OSS_ACCESS_KEY_ID"), std::env::var("OSS_ACCESS_KEY_SECRET"))
+        if let (Ok(ak), Ok(sk)) = (env::var("OSS_ACCESS_KEY_ID"), env::var("OSS_ACCESS_KEY_SECRET"))
             && !ak.is_empty()
             && !sk.is_empty()
         {
-            let token = std::env::var("OSS_SESSION_TOKEN").ok().filter(|s| !s.is_empty());
+            let token = env::var("OSS_SESSION_TOKEN").ok().filter(|s| !s.is_empty());
             return Some(match token {
                 Some(t) => Credentials::with_sts(ak, sk, t, None),
                 None => Credentials::new(ak, sk),

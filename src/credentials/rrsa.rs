@@ -11,10 +11,19 @@
 //! * `ALIBABA_CLOUD_ROLE_ARN` – ARN of the RAM role to assume.
 //! * `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` – ARN of the OIDC identity provider.
 //! * `ALIBABA_CLOUD_OIDC_TOKEN_FILE` – path to the OIDC JWT token file.
+//! * `ALIBABA_CLOUD_ROLE_SESSION_NAME` *(optional)* – session name passed to STS.
+//! * `ALIBABA_CLOUD_STS_ENDPOINT` *(optional)* – custom STS endpoint.
+//! * `ALIBABA_CLOUD_SESSION_DURATION_SECONDS` *(optional)* – session duration in
+//!   seconds. **Note:** this name is not part of any official Alibaba Cloud SDK
+//!   convention and may be renamed if the vendor ever standardises one.
+//! * `ALIBABA_CLOUD_CREDENTIALS_REFRESH_SKEW_SECONDS` *(optional)* – how many
+//!   seconds before expiration to proactively refresh credentials. Defaults to
+//!   300 (5 minutes). **Note:** same as above — name is provisional.
 //!
 //! See <https://help.aliyun.com/zh/ram/developer-reference/api-sts-2015-04-01-assumerolewithoidc>
 //! for the full API reference.
 
+use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -203,14 +212,18 @@ impl RrsaCredentialsProvider {
 
     /// Attempt to build a provider from the standard ACK-injected environment
     /// variables. Returns `None` if any of the required variables are missing.
+    ///
+    /// `ALIBABA_CLOUD_SESSION_DURATION_SECONDS` and
+    /// `ALIBABA_CLOUD_CREDENTIALS_REFRESH_SKEW_SECONDS` are also read when
+    /// present; if absent or unparseable the built-in defaults are used.
     pub fn from_env(http_client: reqwest::Client) -> Option<Self> {
-        let role_arn = std::env::var("ALIBABA_CLOUD_ROLE_ARN")
+        let role_arn = env::var("ALIBABA_CLOUD_ROLE_ARN")
             .ok()
             .filter(|s| !s.is_empty())?;
-        let oidc_provider_arn = std::env::var("ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
+        let oidc_provider_arn = env::var("ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
             .ok()
             .filter(|s| !s.is_empty())?;
-        let oidc_token_file = std::env::var("ALIBABA_CLOUD_OIDC_TOKEN_FILE")
+        let oidc_token_file = env::var("ALIBABA_CLOUD_OIDC_TOKEN_FILE")
             .ok()
             .filter(|s| !s.is_empty())?;
 
@@ -220,16 +233,35 @@ impl RrsaCredentialsProvider {
             .oidc_token_file_path(oidc_token_file)
             .http_client(http_client);
 
-        if let Ok(name) = std::env::var("ALIBABA_CLOUD_ROLE_SESSION_NAME")
+        if let Ok(name) = env::var("ALIBABA_CLOUD_ROLE_SESSION_NAME")
             && !name.is_empty()
         {
             builder = builder.role_session_name(name);
         }
 
-        if let Ok(endpoint) = std::env::var("ALIBABA_CLOUD_STS_ENDPOINT")
+        if let Ok(endpoint) = env::var("ALIBABA_CLOUD_STS_ENDPOINT")
             && !endpoint.is_empty()
         {
             builder = builder.sts_endpoint(normalize_sts_endpoint(endpoint));
+        }
+
+        if let Ok(s) = env::var("ALIBABA_CLOUD_SESSION_DURATION_SECONDS")
+            && let Ok(secs) = s.parse::<u32>()
+        {
+            // NOTE: ALIBABA_CLOUD_SESSION_DURATION_SECONDS is not an officially
+            // defined Alibaba Cloud SDK environment variable. The name is
+            // provisional and may change if the vendor ever standardises one.
+            builder = builder.session_duration_seconds(secs);
+        }
+
+        if let Ok(s) = env::var("ALIBABA_CLOUD_CREDENTIALS_REFRESH_SKEW_SECONDS")
+            && let Ok(secs) = s.parse::<u64>()
+        {
+            // NOTE: ALIBABA_CLOUD_CREDENTIALS_REFRESH_SKEW_SECONDS is not an
+            // officially defined Alibaba Cloud SDK environment variable. The
+            // name is provisional and may change if the vendor ever standardises
+            // one.
+            builder = builder.refresh_skew(Duration::from_secs(secs));
         }
 
         builder.build().ok()

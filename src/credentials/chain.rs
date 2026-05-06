@@ -1,16 +1,9 @@
-use std::time::Duration;
-
 use tracing::debug;
 
 use crate::Result;
 use crate::credentials::env::EnvironmentCredentialsProvider;
 use crate::credentials::rrsa::RrsaCredentialsProvider;
-use crate::credentials::{
-    CachingCredentialsProvider,
-    Credentials,
-    CredentialsProvider,
-    DynCredentialsProvider,
-};
+use crate::credentials::{Credentials, CredentialsProvider, DynCredentialsProvider};
 
 /// Walks a list of providers in order, returning credentials from the first
 /// provider that succeeds.
@@ -78,42 +71,26 @@ impl CredentialsProvider for CredentialsChain {
 /// 2. `RrsaCredentialsProvider::from_env` – resolves RRSA/OIDC config from
 ///    `ALIBABA_CLOUD_ROLE_ARN`, `ALIBABA_CLOUD_OIDC_PROVIDER_ARN`, and
 ///    `ALIBABA_CLOUD_OIDC_TOKEN_FILE`.
-///
-/// The result is cached via [`CachingCredentialsProvider`] so temporary
-/// credentials are reused until they approach expiration.
 #[derive(Debug)]
 pub struct DefaultCredentialsChain {
-    inner: CachingCredentialsProvider<CredentialsChain>,
+    inner: CredentialsChain,
 }
 
 /// Builder for [`DefaultCredentialsChain`].
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DefaultCredentialsChainBuilder {
     http_client: Option<reqwest::Client>,
-    refresh_skew: Option<Duration>,
 }
 
 impl DefaultCredentialsChainBuilder {
     pub fn new() -> Self {
-        Self {
-            http_client: None,
-            refresh_skew: None,
-        }
+        Self::default()
     }
 
     /// Reuse the provided `reqwest::Client` for STS calls made by the RRSA
     /// provider inside the chain.
     pub fn http_client(mut self, client: reqwest::Client) -> Self {
         self.http_client = Some(client);
-        self
-    }
-
-    /// How long before expiration to proactively refresh credentials.
-    ///
-    /// Defaults to 5 minutes. Applies to the outer
-    /// [`CachingCredentialsProvider`] that wraps the whole chain.
-    pub fn refresh_skew(mut self, skew: Duration) -> Self {
-        self.refresh_skew = Some(skew);
         self
     }
 
@@ -125,17 +102,7 @@ impl DefaultCredentialsChainBuilder {
             chain = chain.push("rrsa", rrsa);
         }
 
-        let mut caching = CachingCredentialsProvider::new(chain);
-        if let Some(skew) = self.refresh_skew {
-            caching = caching.with_refresh_skew(skew);
-        }
-        DefaultCredentialsChain { inner: caching }
-    }
-}
-
-impl Default for DefaultCredentialsChainBuilder {
-    fn default() -> Self {
-        Self::new()
+        DefaultCredentialsChain { inner: chain }
     }
 }
 
@@ -207,11 +174,5 @@ mod tests {
             .push("b", FailingProvider);
         let err = chain.get_credentials().await.unwrap_err();
         assert!(matches!(err, crate::Error::InvalidCredentials));
-    }
-
-    #[test]
-    fn test_default_chain_builder_refresh_skew() {
-        let builder = DefaultCredentialsChain::builder().refresh_skew(Duration::from_secs(120));
-        assert_eq!(builder.refresh_skew, Some(Duration::from_secs(120)));
     }
 }

@@ -446,12 +446,10 @@ match client
 
 - [`reqwest`](https://docs.rs/reqwest) — HTTP with `rustls-no-provider` and streaming.
 - [`tokio`](https://docs.rs/tokio) / [`futures`](https://docs.rs/futures) — async runtime and stream primitives.
-- [`serde`](https://docs.rs/serde) + [`serde_json`](https://docs.rs/serde_json)
-- [`quick-xml`](https://docs.rs/quick-xml) — request/response encoding.
+- [`serde`](https://docs.rs/serde) + [`serde_json`](https://docs.rs/serde_json) + [`quick-xml`](https://docs.rs/quick-xml) — request/response encoding.
 - [`jiff`](https://docs.rs/jiff) — timestamps and durations.
 - [`bytes`](https://docs.rs/bytes) — zero-copy byte buffers.
-- [`hmac`](https://docs.rs/hmac) + [`sha2`](https://docs.rs/sha2) +
-- [`sha1`](https://docs.rs/sha1) + [`crc32fast`](https://docs.rs/crc32fast) — signing and SelectObject payload CRC.
+- [`hmac`](https://docs.rs/hmac) + [`sha2`](https://docs.rs/sha2) + [`sha1`](https://docs.rs/sha1) + [`crc32fast`](https://docs.rs/crc32fast) — signing and SelectObject payload CRC.
 
 ## 📖 Documentation
 
