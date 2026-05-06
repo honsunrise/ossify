@@ -1,6 +1,6 @@
 [package]
 name = "ossify"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Honsun Zhu <honsun@linux.com>"]
 edition = "2024"
 rust-version = "1.88"
