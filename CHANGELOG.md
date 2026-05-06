@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] – 2026-05-06
+
+### Changed
+
+- `DefaultCredentialsChain` no longer wraps the chain in an extra
+  `CachingCredentialsProvider`. `RrsaCredentialsProvider` already caches
+  STS credentials internally; caching env-var credentials at the outer
+  layer would hide rotated keys.
+- `DefaultCredentialsChainBuilder` drops the now-redundant `refresh_skew`
+  and `session_duration_seconds` builder methods.
+
+### Added – credentials
+
+- `RrsaCredentialsProvider::from_env` now reads two provisional
+  environment variables (names are not part of any official Alibaba Cloud
+  SDK convention and may change if the vendor standardises them):
+  - `ALIBABA_CLOUD_SESSION_DURATION_SECONDS` — overrides the STS session
+    duration (default 3600 s).
+  - `ALIBABA_CLOUD_CREDENTIALS_REFRESH_SKEW_SECONDS` — how many seconds
+    before expiration to proactively refresh credentials (default 300 s).
+
 ## [0.4.0] – 2026-04-28
 
 ### Overview
@@ -22,6 +43,7 @@ been refined (see below) compared to `v0.3.x`.
 ### Added – categories & APIs
 
 #### Service (account-level, `USE_BUCKET=false`)
+
 - `DescribeRegions`
 - `ListUserDataRedundancyTransition`
 - `InitUserAntiDDosInfo`, `UpdateUserAntiDDosInfo`, `GetUserAntiDDosInfo`
@@ -30,6 +52,7 @@ been refined (see below) compared to `v0.3.x`.
   (12 operations under `ops::service::resource_pool`)
 
 #### Bucket
+
 - `access_monitor/` — Put/Get
 - `access_point/` — Create/Get/Delete/ListAccessPoints, Put/Get/Delete
   AccessPointPolicy
@@ -62,6 +85,7 @@ been refined (see below) compared to `v0.3.x`.
 - `website/` — Put/Get/Delete
 
 #### Object
+
 - `base/` — AppendObject, SealAppendObject, GetObjectMeta,
   DeleteMultipleObjects, RestoreObject, CleanRestoredObject,
   PostObject (V1 + V4 signing helpers) and Callback helpers
@@ -76,13 +100,15 @@ been refined (see below) compared to `v0.3.x`.
 - `tagging/` — Put/Get/Delete
 
 #### Vector Bucket (`ops::vector_bucket`, dedicated `oss-vectors` endpoint)
+
 - `bucket/` — Put/Get/List/Delete VectorBucket (13 JSON APIs total)
 - `index/` — Put/Get/List/Delete VectorIndex
 - `vectors/` — Put/Get/List/Delete/Query Vectors with a typed
   MongoDB-style filter DSL (`VectorFilter::{eq,ne,is_in,not_in,exists,
-  and,or,Raw}`) and `top_k` ANN search
+and,or,Raw}`) and `top_k` ANN search
 
 ### Added – infrastructure
+
 - `body::JSONBody<T>` — JSON request body encoder (for Vector Bucket).
 - `response::StreamResponseProcessor` — returns the raw
   `reqwest::Response` so callers can consume streamed / framed bodies
@@ -95,12 +121,14 @@ been refined (see below) compared to `v0.3.x`.
   verification (via `crc32fast`).
 
 ### Added – credentials
+
 - `RrsaCredentialsProvider` — OIDC-token → STS credentials exchange
   with automatic refresh, for ACK (Alibaba Cloud Kubernetes) pods.
 - `DefaultCredentialsChain` — walks environment credentials and RRSA
   when neither explicit AK/SK nor a provider is supplied.
 
 ### Changed
+
 - `Error::ApiError { status_code, message }` replaces the older
   opaque HTTP-error variant; consumers can now pattern-match on OSS
   response codes directly.
@@ -108,6 +136,7 @@ been refined (see below) compared to `v0.3.x`.
   feature; code snippets updated to compile against the current API.
 
 ### Fixed
+
 - Query-string serializer: a sequence of `(key, value)` tuples (for
   example `Vec<(&str, &str)>`) now serialises to
   `"key1=value1&key2=value2"` instead of concatenating the raw
@@ -116,17 +145,19 @@ been refined (see below) compared to `v0.3.x`.
      wrote only `value` instead of `key=value`.
   2. `SeqSerializer` / `TupleSerializer` never emitted `&` between
      elements and never skipped empty `(key, None)` pairs.
-  The serializer now writes each pair into a scratch buffer, skips
-  entries whose value is `None` / unit, and inserts `&` between
-  non-empty pairs. Unblocks the previously long-standing
-  `ser::tests::test_serialize_tags` failure.
+     The serializer now writes each pair into a scratch buffer, skips
+     entries whose value is `None` / unit, and inserts `&` between
+     non-empty pairs. Unblocks the previously long-standing
+     `ser::tests::test_serialize_tags` failure.
 
 ### Dependencies
+
 - Added `crc32fast = "1.5"`.
 - Kept in sync with `reqwest = "0.13"` (`rustls-no-provider`),
   `quick-xml = "0.39"`, `serde_with = "3.14"`, `jiff = "0.2"`.
 
 ### Test & quality
+
 - Lib test count grew from the `v0.3.x` baseline to **530 passing
   tests** (all green — the `ser::tests::test_serialize_tags` failure
   inherited from earlier releases was fixed as part of this cycle).
@@ -139,4 +170,5 @@ Earlier versions bootstrapped the signing pipeline, covered
 multipart uploads, presigned URLs, and the core credential providers.
 See the git history for details.
 
+[0.4.1]: https://github.com/honsunrise/ossify/releases/tag/v0.4.1
 [0.4.0]: https://github.com/honsunrise/ossify/releases/tag/v0.4.0
