@@ -96,7 +96,7 @@ impl Credentials {
 ///
 /// Implementations must be cheap to clone (usually via `Arc`) and safe to share
 /// across threads. Results may be cached internally; callers should call
-/// [`get_credentials`] whenever they are about to sign a request rather than
+/// [`CredentialsProvider::get_credentials`] whenever they are about to sign a request rather than
 /// keeping the returned value for long.
 pub trait CredentialsProvider: Send + Sync + std::fmt::Debug {
     /// Retrieve a fresh set of credentials.

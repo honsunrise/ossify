@@ -300,7 +300,7 @@ pub trait SelectObjectOps {
         request: SelectRequest,
     ) -> impl Future<Output = Result<SelectFrameStream<reqwest::Response>>>;
 
-    /// Run a JSON Select query; see [`select_object_csv`] for details.
+    /// Run a JSON Select query; see [`SelectObjectOps::select_object_csv`] for details.
     fn select_object_json(
         &self,
         key: impl Into<String>,

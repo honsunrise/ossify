@@ -4,7 +4,7 @@
 //!
 //! Like `SelectObject`, the response is a binary frame stream; the summary
 //! statistics (splits / rows / cols) are carried in a single
-//! [`SelectFrame::MetaEndCsv`] or [`SelectFrame::MetaEndJson`] frame.
+//! [`super::frame::SelectFrame::MetaEndCsv`] or [`super::frame::SelectFrame::MetaEndJson`] frame.
 //!
 //! Official document: <https://www.alibabacloud.com/help/en/oss/developer-reference/createselectobjectmeta>
 
