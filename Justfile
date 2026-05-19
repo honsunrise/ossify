@@ -20,7 +20,7 @@ check:
     cargo check
 
 test $RUST_BACKTRACE="full":
-    cargo test
+    cargo hack test --each-feature --workspace --exclude-features rustls-no-provider
 
 fmt:
     taplo fmt
@@ -32,7 +32,7 @@ lint:
 ci-check:
     taplo fmt --check
     cargo +nightly fmt --all --check
-    cargo check --workspace --all-targets --future-incompat-report --locked
+    cargo hack check --each-feature --workspace --all-targets --locked
 
 ci-lint:
-    cargo clippy --workspace --all-targets --future-incompat-report --locked -- -D warnings
+    cargo clippy --workspace --all-targets --locked -- -D warnings

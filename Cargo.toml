@@ -1,6 +1,6 @@
 [package]
 name = "ossify"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Honsun Zhu <honsun@linux.com>"]
 edition = "2024"
 rust-version = "1.88"
@@ -13,6 +13,16 @@ keywords = ["oss", "alibaba-cloud", "storage", "oss-sdk", "object-storage"]
 description = "A modern, easy-to-use, and reqwest-powered Rust SDK for Alibaba Cloud Object Storage Service (OSS)"
 
 publish = true
+
+[features]
+default = ["default-tls"]
+default-tls = ["reqwest/default-tls"]
+rustls = ["reqwest/rustls"]
+rustls-no-provider = ["reqwest/rustls-no-provider"]
+native-tls = ["reqwest/native-tls"]
+native-tls-vendored = ["reqwest/native-tls-vendored"]
+native-tls-no-alpn = ["reqwest/native-tls-no-alpn"]
+native-tls-vendored-no-alpn = ["reqwest/native-tls-vendored-no-alpn"]
 
 [dependencies]
 anyhow = "1.0"
@@ -33,7 +43,6 @@ regex = "1.0"
 reqwest = { version = "0.13", default-features = false, features = [
   "stream",
   "json",
-  "rustls-no-provider",
 ] }
 ryu = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -48,7 +57,6 @@ url = "2.5"
 urlencoding = "2.1"
 
 [dev-dependencies]
-rustls = { version = "0.23", features = ["ring"] }
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3"
 uuid = { version = "1.0", features = ["v4"] }

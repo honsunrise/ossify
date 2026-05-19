@@ -19,7 +19,7 @@ type-safe.
   DDoS protection, LiveChannel streaming, Resource Pool QoS, Vector Bucket
   (with ANN search), SelectObject SQL, and more.
 - **🚀 reqwest-powered** — built on `reqwest` 0.13 with full async/await,
-  streaming uploads/downloads, and `rustls` by default.
+  streaming uploads/downloads, and `default-tls` enabled by default.
 - **🔐 V4 signing + flexible credentials** — OSS V4 signature for both
   request signing and presigned URLs, with a default credentials chain
   covering explicit AK/SK, environment variables, and RRSA/OIDC for ACK.
@@ -40,6 +40,29 @@ ossify = "0.4"
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
 ```
+
+### TLS features
+
+The crate mirrors `reqwest`'s TLS feature names so downstream users can choose
+their TLS backend directly:
+
+```toml
+# Default: enables reqwest's default-tls backend.
+ossify = "0.4"
+
+# Use reqwest with rustls and an included crypto provider.
+ossify = { version = "0.4", default-features = false, features = ["rustls"] }
+
+# Use rustls without selecting a crypto provider in this crate.
+ossify = { version = "0.4", default-features = false, features = ["rustls-no-provider"] }
+
+# Use the platform-native TLS backend.
+ossify = { version = "0.4", default-features = false, features = ["native-tls"] }
+```
+
+Available TLS features are `default-tls`, `rustls`, `rustls-no-provider`,
+`native-tls`, `native-tls-vendored`, `native-tls-no-alpn`, and
+`native-tls-vendored-no-alpn`.
 
 ### Hello, OSS
 
@@ -444,7 +467,7 @@ match client
 
 ### Core dependencies
 
-- [`reqwest`](https://docs.rs/reqwest) — HTTP with `rustls-no-provider` and streaming.
+- [`reqwest`](https://docs.rs/reqwest) — HTTP with selectable TLS backends and streaming.
 - [`tokio`](https://docs.rs/tokio) / [`futures`](https://docs.rs/futures) — async runtime and stream primitives.
 - [`serde`](https://docs.rs/serde) + [`serde_json`](https://docs.rs/serde_json) + [`quick-xml`](https://docs.rs/quick-xml) — request/response encoding.
 - [`jiff`](https://docs.rs/jiff) — timestamps and durations.

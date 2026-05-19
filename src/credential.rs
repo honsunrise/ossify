@@ -235,7 +235,7 @@ fn canonical_headers(input: &HeaderMap, additional_headers: &HashSet<Cow<'_, str
             || additional_headers.contains(k.as_str())
     });
     for (k, v) in filter_input {
-        headers.push((k.as_str().to_lowercase(), v.to_str()?.trim()));
+        headers.push((k.as_str(), v.to_str()?.trim()));
     }
     headers.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
 
@@ -429,7 +429,6 @@ mod tests {
     }
 
     fn build_test_request(url: &str) -> reqwest::Request {
-        let _ = rustls::crypto::ring::default_provider().install_default();
         let client = reqwest::Client::new();
         client.get(url).build().unwrap()
     }

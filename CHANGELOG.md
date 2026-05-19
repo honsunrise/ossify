@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] – 2026-05-19
+
+### Added
+
+- Mirrored `reqwest` TLS backend features at the `ossify` crate level:
+  `default-tls`, `rustls`, `rustls-no-provider`, `native-tls`,
+  `native-tls-vendored`, `native-tls-no-alpn`, and
+  `native-tls-vendored-no-alpn`.
+- Added GitHub Actions CI and release workflows, with feature-combination
+  checks driven through `cargo-hack`.
+
+### Changed
+
+- The default TLS backend now follows `reqwest`'s `default-tls` feature.
+  `reqwest` itself is still built with `default-features = false`, and TLS
+  selection is controlled through `ossify` features.
+- Tests no longer install a rustls crypto provider manually through a
+  `rustls` dev-dependency, so default-client construction is validated
+  through the crate's public feature graph.
+
+### Fixed
+
+- Explicit endpoint ports are preserved when building request URLs and `Host`
+  headers, including custom endpoints such as `http://127.0.0.1:9000` and
+  bracketed IPv6 endpoints. This keeps OSS V4 signing aligned with the actual
+  HTTP authority.
+
 ## [0.4.1] – 2026-05-06
 
 ### Changed
@@ -153,7 +180,7 @@ and,or,Raw}`) and `top_k` ANN search
 ### Dependencies
 
 - Added `crc32fast = "1.5"`.
-- Kept in sync with `reqwest = "0.13"` (`rustls-no-provider`),
+- Kept in sync with `reqwest = "0.13"` and mirrors its TLS backend features,
   `quick-xml = "0.39"`, `serde_with = "3.14"`, `jiff = "0.2"`.
 
 ### Test & quality
@@ -170,5 +197,6 @@ Earlier versions bootstrapped the signing pipeline, covered
 multipart uploads, presigned URLs, and the core credential providers.
 See the git history for details.
 
+[0.4.2]: https://github.com/honsunrise/ossify/releases/tag/v0.4.2
 [0.4.1]: https://github.com/honsunrise/ossify/releases/tag/v0.4.1
 [0.4.0]: https://github.com/honsunrise/ossify/releases/tag/v0.4.0

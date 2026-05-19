@@ -428,16 +428,13 @@ impl ClientBuilder {
 
         // Parse endpoint URL
         let endpoint_url = Url::parse(&endpoint)?;
-        let raw_internal_host = endpoint_url.host_str().ok_or(Error::MissingHost)?.to_owned();
+        let raw_internal_host = endpoint_authority(&endpoint_url)?;
         let raw_internal_scheme = endpoint_url.scheme().to_owned();
 
         // Parse public endpoint URL (use internal endpoint if not specified)
         let public_endpoint_str = self.public_endpoint.as_ref().unwrap_or(&endpoint);
         let public_endpoint_url = Url::parse(public_endpoint_str)?;
-        let raw_public_host = public_endpoint_url
-            .host_str()
-            .ok_or(Error::MissingHost)?
-            .to_owned();
+        let raw_public_host = endpoint_authority(&public_endpoint_url)?;
         let raw_public_scheme = public_endpoint_url.scheme().to_owned();
 
         // Resolve credentials provider:
@@ -477,8 +474,78 @@ impl ClientBuilder {
     }
 }
 
+fn endpoint_authority(url: &Url) -> Result<String> {
+    let mut host = url.host().ok_or(Error::MissingHost)?.to_string();
+    if let Some(port) = url.port() {
+        host.push(':');
+        host.push_str(&port.to_string());
+    }
+    Ok(host)
+}
+
 impl Default for ClientBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::body::NoneBody;
+    use crate::response::EmptyResponseProcessor;
+
+    #[derive(Clone, Serialize)]
+    struct Empty;
+
+    struct TestOps;
+
+    impl Ops for TestOps {
+        type Body = NoneBody;
+        type Query = Empty;
+        type Response = EmptyResponseProcessor;
+
+        fn prepare(self) -> Result<Prepared<Self::Query, <Self::Body as MakeBody>::Body>> {
+            Ok(Prepared {
+                method: http::Method::GET,
+                ..Default::default()
+            })
+        }
+    }
+
+    #[cfg(feature = "default-tls")]
+    #[test]
+    fn default_client_builds_with_default_tls() {
+        Client::builder()
+            .endpoint("https://oss-cn-hangzhou.aliyuncs.com")
+            .region("cn-hangzhou")
+            .bucket("test-bucket")
+            .build()
+            .unwrap();
+    }
+
+    #[test]
+    fn endpoint_authority_preserves_ipv6_endpoint_port() {
+        let url = Url::parse("http://[::1]:9000").unwrap();
+
+        assert_eq!(endpoint_authority(&url).unwrap(), "[::1]:9000");
+    }
+
+    #[tokio::test]
+    async fn prepare_request_preserves_custom_endpoint_port_in_host_header() {
+        let client = Client::builder()
+            .endpoint("http://127.0.0.1:9000")
+            .region("cn-hangzhou")
+            .bucket("test-bucket")
+            .access_key_id("test-ak")
+            .access_key_secret("test-sk")
+            .url_style(UrlStyle::Path)
+            .build()
+            .unwrap();
+
+        let request = client.prepare_request(TestOps, false, None).await.unwrap();
+
+        assert_eq!(request.url().as_str(), "http://127.0.0.1:9000/test-bucket/");
+        assert_eq!(request.headers().get(HOST).unwrap().to_str().unwrap(), "127.0.0.1:9000");
     }
 }
